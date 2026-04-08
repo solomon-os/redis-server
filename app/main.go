@@ -47,6 +47,8 @@ func handleConnection(conn net.Conn) {
 	for scanner.Scan() {
 		text := scanner.Text()
 		fmt.Println(text)
-		_, _ = conn.Write([]byte("+PONG\r\n"))
+		if text == "PING" {
+			_, _ = conn.Write([]byte("+PONG\r\n"))
+		}
 	}
 }
