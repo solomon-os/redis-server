@@ -40,9 +40,12 @@ func main() {
 }
 
 func handleConnection(conn net.Conn) {
-	for {
-		reader := bufio.NewReader(conn)
-		_, _ = reader.ReadString('\n')
+	defer conn.Close()
+
+	scanner := bufio.NewScanner(conn)
+
+	for scanner.Scan() {
+		text := scanner.Text()
 		_, _ = conn.Write([]byte("+PONG\r\n"))
 	}
 }
