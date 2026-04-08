@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"net"
 	"os"
 )
@@ -30,5 +31,10 @@ func main() {
 		os.Exit(1)
 	}
 
-	_, _ = conn.Write([]byte("+PONG\r\n"))
+	for {
+		buf, _ := io.ReadAll(conn)
+		fmt.Println(string(buf))
+		_, _ = conn.Write([]byte("+PONG\r\n"))
+
+	}
 }
