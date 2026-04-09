@@ -14,6 +14,7 @@ type Parser struct {
 }
 
 const (
+	PING_COMMAND = "PING"
 	ECHO_COMMAND = "ECHO"
 	ARRAY_TYPE   = "Array"
 )
@@ -63,6 +64,10 @@ func (p *Parser) parseArray(input string, _ int) error {
 func (p *Parser) Decode() string {
 	if p.Command == ECHO_COMMAND {
 		return fmt.Sprintf("$%d\r\n%s\r\n", len(p.Array[1]), p.Array[1])
+	}
+
+	if p.Command == PING_COMMAND {
+		return fmt.Sprintf("+PONG\r\n")
 	}
 
 	return ""
