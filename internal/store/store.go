@@ -6,54 +6,63 @@ import (
 )
 
 type Store interface {
-	Set(k, v string) error
 	Get(k string) (string, bool)
 
-	SetWithArgs(k, v string, ttl int64)
+	Set(k, v string, ttl int64)
 }
 
 type store struct {
-	data map[string]string
+	data map[string]record
 	sync.RWMutex
 }
 
-func New() Store {
-	return &store{data: make(map[string]string)}
+type record struct {
+	value string
+	timer *time.Timer
 }
 
-func (s *store) Set(k, v string) error {
-	s.Lock()
-	defer s.Unlock()
-
-	s.data[k] = v
-	return nil
+func New() Store {
+	return &store{data: make(map[string]record)}
 }
 
 func (s *store) Get(k string) (string, bool) {
 	s.RLock()
 	defer s.RUnlock()
 
-	val, ok := s.data[k]
-	return val, ok
+	r, ok := s.data[k]
+	return r.value, ok
 }
 
-func (s *store) SetWithArgs(k, v string, ttl int64) {
+func (s *store) Set(k, v string, ttl int64) {
 	s.Lock()
 	defer s.Unlock()
 
-	s.data[k] = v
-	go s.removeKey(k, ttl)
-}
+	var timer *time.Timer
 
-func (s *store) removeKey(key string, ttl int64) {
-	if ttl <= 0 {
-		return
+	if ttl > 0 {
+		// check if key already exists and stop previous timer
+		if r, ok := s.data[k]; ok {
+			// timer
+			if r.timer != nil {
+				r.timer.Stop()
+			}
+		}
+		timer = time.AfterFunc(time.Duration(ttl)*time.Millisecond, s.removeKey(k))
 	}
 
-	time.Sleep(time.Duration(ttl) * time.Millisecond)
+	r := record{
+		value: v,
+		timer: timer,
+	}
 
-	s.Lock()
-	defer s.Unlock()
+	s.data[k] = r
+}
 
-	delete(s.data, key)
+func (s *store) removeKey(key string) func() {
+	return func() {
+		s.Lock()
+		defer s.Unlock()
+
+		delete(s.data, key)
+	}
 }
