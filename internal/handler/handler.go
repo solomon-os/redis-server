@@ -9,8 +9,6 @@ import (
 )
 
 type Handler struct {
-	store store.Store
-}
 
 func New(store store.Store) *Handler {
 	return &Handler{store}
@@ -36,7 +34,8 @@ func (h *Handler) handleCommand(cmd parser.Command) string {
 		}
 		return resp.BulkString(cmd.Args[0])
 	case "SET":
-		if err := h.store.Put(cmd.Args[0], cmd.Args[1]); err != nil {
+		setArgs := parser.ParseSetArgs(cmd)
+		if err := h.store.Set(cmd.Args[0], cmd.Args[1]); err != nil {
 			return resp.Error("insertion failed")
 		}
 		return resp.SimpleString("OK")
