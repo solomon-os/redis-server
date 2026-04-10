@@ -6,21 +6,24 @@ import (
 	"log/slog"
 	"net"
 
-	"github.com/codecrafters-io/redis-starter-go/internal/parser"
+	"github.com/codecrafters-io/redis-starter-go/internal/handler"
 	"github.com/codecrafters-io/redis-starter-go/internal/resp"
 	"github.com/codecrafters-io/redis-starter-go/internal/store"
 )
 
 type Server struct {
-	addr  string
-	l     net.Listener
-	store store.Store
+	addr    string
+	l       net.Listener
+	handler *handler.Handler
 }
 
 func New(addr string) *Server {
 	slog.Info("Logs from your program will appear here!")
 
-	return &Server{addr: addr, store: store.New()}
+	store := store.New()
+	handler := handler.New(store)
+
+	return &Server{addr: addr, handler: handler}
 }
 
 func (s *Server) ListenAndAccept() error {
@@ -61,43 +64,17 @@ func (s *Server) handleConnection(conn net.Conn) {
 			return
 		}
 
-		cmd, err := parser.Parse(string(buf[:n]))
+		response, err := s.handler.Handle(string(buf[:n]))
 		if err != nil {
-			slog.Error("couldn't parse message", "error", err)
-			_, _ = io.WriteString(conn, resp.Error("invalid command"))
+			slog.Error("", "error", err)
+			_, _ = io.WriteString(conn, resp.Error(err.Error()))
 			return
 		}
 
-		response := s.handleCommand(cmd)
 		_, err = io.WriteString(conn, response)
 		if err != nil {
 			slog.Error("couldn't send response", "error", err)
 			return
 		}
-	}
-}
-
-func (s *Server) handleCommand(cmd parser.Command) string {
-	switch cmd.Name {
-	case "PING":
-		return resp.SimpleString("PONG")
-	case "ECHO":
-		if len(cmd.Args) < 1 {
-			return resp.Error("wrong number of arguments for 'echo' command")
-		}
-		return resp.BulkString(cmd.Args[0])
-	case "SET":
-		if err := s.store.Put(cmd.Args[0], cmd.Args[1]); err != nil {
-			return resp.Error("insertion failed")
-		}
-		return resp.SimpleString("OK")
-	case "GET":
-		val, exist := s.store.Get(cmd.Args[0])
-		if !exist {
-			return resp.NullBulkString()
-		}
-		return resp.BulkString(val)
-	default:
-		return resp.Error("unknown command")
 	}
 }
