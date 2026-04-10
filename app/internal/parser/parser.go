@@ -2,6 +2,8 @@ package parser
 
 import (
 	"errors"
+	"fmt"
+	"log/slog"
 	"strconv"
 	"strings"
 )
@@ -22,6 +24,7 @@ func Parse(input string) (Command, error) {
 }
 
 func parseArray(input string) (Command, error) {
+	slog.Info(fmt.Sprintf("%q", input))
 	strArray := strings.Split(input, "\r\n")
 	size, err := strconv.Atoi(strArray[0][1:])
 	if err != nil {
