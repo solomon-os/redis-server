@@ -8,20 +8,16 @@ import (
 	"os"
 
 	"github.com/codecrafters-io/redis-starter-go/app/internal/parser"
+	"github.com/codecrafters-io/redis-starter-go/app/internal/resp"
 )
 
-// Ensures gofmt doesn't remove the "net" and "os" imports in stage 1 (feel free to remove this!)
 var (
 	_ = net.Listen
 	_ = os.Exit
 )
 
 func main() {
-	// You can use print statements as follows for debugging, they'll be visible when running tests.
 	fmt.Println("Logs from your program will appear here!")
-
-	// Uncomment the code below to pass the first stage
-	//
 
 	l, err := net.Listen("tcp", "0.0.0.0:6379")
 	if err != nil {
@@ -30,7 +26,6 @@ func main() {
 	}
 
 	for {
-
 		conn, err := l.Accept()
 		if err != nil {
 			fmt.Println("Error accepting connection: ", err.Error())
@@ -38,35 +33,50 @@ func main() {
 		}
 
 		go handleConnection(conn)
-
 	}
 }
 
 func handleConnection(conn net.Conn) {
 	defer conn.Close()
 	buf := make([]byte, 1024)
-	p := parser.New()
 
 	for {
 		n, err := conn.Read(buf)
 		if err != nil {
-			fmt.Printf("%v", err)
+			if err != io.EOF {
+				slog.Error("read error", "error", err)
+			}
 			return
 		}
 
-		p, err = p.Parse(string(buf[:n]), n)
+		cmd, err := parser.Parse(string(buf[:n]))
 		if err != nil {
-			slog.Error("couldn't parse message: ", "error", err)
+			slog.Error("couldn't parse message", "error", err)
+			io.WriteString(conn, resp.Error("invalid command"))
 			return
 		}
-		resp := p.Decode()
-		fmt.Printf("%#v", p)
-		fmt.Printf("%q\n", []byte(resp))
 
-		_, err = io.WriteString(conn, resp)
+		response := handleCommand(cmd)
+		_, err = io.WriteString(conn, response)
 		if err != nil {
-			slog.Error("couldn't send response: ", "error", err)
+			slog.Error("couldn't send response", "error", err)
 			return
 		}
+	}
+}
+
+func handleCommand(cmd parser.Command) string {
+	switch cmd.Name {
+	case "PING":
+		return resp.SimpleString("PONG")
+	case "ECHO":
+		if len(cmd.Args) < 1 {
+			return resp.Error("wrong number of arguments for 'echo' command")
+		}
+		return resp.BulkString(cmd.Args[0])
+	case "SET":
+		return resp.SimpleString("OK")
+	default:
+		return resp.Error("unknown command")
 	}
 }
