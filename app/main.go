@@ -3,7 +3,7 @@ package main
 import (
 	"log"
 
-	"github.com/codecrafters-io/redis-starter-go/app/internal/server"
+	"github.com/codecrafters-io/redis-starter-go/internal/server"
 )
 
 func main() {

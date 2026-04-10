@@ -6,9 +6,9 @@ import (
 	"log/slog"
 	"net"
 
-	"github.com/codecrafters-io/redis-starter-go/app/internal/parser"
-	"github.com/codecrafters-io/redis-starter-go/app/internal/resp"
-	"github.com/codecrafters-io/redis-starter-go/app/internal/store"
+	"github.com/codecrafters-io/redis-starter-go/internal/parser"
+	"github.com/codecrafters-io/redis-starter-go/internal/resp"
+	"github.com/codecrafters-io/redis-starter-go/internal/store"
 )
 
 type Server struct {
