@@ -8,17 +8,19 @@ import (
 
 	"github.com/codecrafters-io/redis-starter-go/app/internal/parser"
 	"github.com/codecrafters-io/redis-starter-go/app/internal/resp"
+	"github.com/codecrafters-io/redis-starter-go/app/internal/store"
 )
 
 type Server struct {
-	addr string
-	l    net.Listener
+	addr  string
+	l     net.Listener
+	store store.Store
 }
 
 func New(addr string) *Server {
 	slog.Info("Logs from your program will appear here!")
 
-	return &Server{addr: addr}
+	return &Server{addr: addr, store: store.New()}
 }
 
 func (s *Server) ListenAndAccept() error {
@@ -85,7 +87,16 @@ func (s *Server) handleCommand(cmd parser.Command) string {
 		}
 		return resp.BulkString(cmd.Args[0])
 	case "SET":
+		if err := s.store.Put(cmd.Args[0], cmd.Args[1]); err != nil {
+			return resp.Error("insertion failed")
+		}
 		return resp.SimpleString("OK")
+	case "GET":
+		val, exist := s.store.Get(cmd.Args[0])
+		if !exist {
+			return resp.NullBulkString()
+		}
+		return resp.BulkString(val)
 	default:
 		return resp.Error("unknown command")
 	}
