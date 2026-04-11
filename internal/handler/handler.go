@@ -38,6 +38,8 @@ func (h *Handler) handleCommand(cmd parser.Command) string {
 	case "RPUSH":
 		return h.handleRPush(cmd)
 
+	case "LRANGE":
+		return h.handleLRange(cmd)
 	case "GET":
 		return h.handleGet(cmd)
 	default:
@@ -74,4 +76,10 @@ func (h *Handler) handleRPush(cmd parser.Command) string {
 	args := parser.ParseRPushArgs(cmd)
 	size := h.store.SetList(args.ListKey, args.ListValue)
 	return resp.Integer(size)
+}
+
+func (h *Handler) handleLRange(cmd parser.Command) string {
+	args := parser.ParseLRangeArgs(cmd)
+	list := h.store.GetListRange(args.Key, args.Start, args.End)
+	return resp.BulkStringArray(list)
 }

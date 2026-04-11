@@ -8,9 +8,9 @@ import (
 
 type Store interface {
 	Get(k string) (string, bool)
-
 	Set(k, v string, ttl int64)
 	SetList(k string, v []string) int
+	GetListRange(k string, start, end int) []string
 }
 
 type store struct {
@@ -72,9 +72,31 @@ func (s *store) SetList(k string, v []string) int {
 	}
 	s.kvList[k] = append(s.kvList[k], v...)
 
-	log.Println(s.kvList[k])
-
 	return len(s.kvList[k])
+}
+
+func (s *store) GetListRange(k string, start, end int) []string {
+	s.RLock()
+	defer s.RUnlock()
+
+	list, exist := s.kvList[k]
+	if !exist {
+		return nil
+	}
+
+	if start < 0 {
+		start = 0
+	}
+
+	if start > end || start >= len(list) {
+		return nil
+	}
+
+	if end >= len(list) {
+		end = len(list) - 1
+	}
+
+	return list[start : end+1]
 }
 
 func (s *store) removeKey(key string) func() {
