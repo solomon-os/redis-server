@@ -1,7 +1,7 @@
 package store
 
 import (
-	"log"
+	"slices"
 	"sync"
 	"time"
 )
@@ -9,8 +9,9 @@ import (
 type Store interface {
 	Get(k string) (string, bool)
 	Set(k, v string, ttl int64)
-	SetList(k string, v []string) int
-	GetListRange(k string, start, end int) []string
+	LPush(k string, v []string) int
+	RPush(k string, v []string) int
+	LRange(k string, start, end int) []string
 }
 
 type store struct {
@@ -61,21 +62,35 @@ func (s *store) Set(k, v string, ttl int64) {
 	s.kv[k] = r
 }
 
-func (s *store) SetList(k string, v []string) int {
+// RPush appends element at the right end of the array
+func (s *store) RPush(k string, v []string) int {
 	s.Lock()
 	defer s.Unlock()
 
 	if _, exist := s.kvList[k]; !exist {
 		s.kvList[k] = v
-		log.Println(s.kvList[k])
-		return len(s.kvList[k])
 	}
 	s.kvList[k] = append(s.kvList[k], v...)
 
 	return len(s.kvList[k])
 }
 
-func (s *store) GetListRange(k string, start, end int) []string {
+// LPush appends elemens at the left (beginning) end of the list
+func (s *store) LPush(k string, v []string) int {
+	slices.Reverse(v)
+	s.Lock()
+	defer s.Unlock()
+
+	if _, exist := s.kvList[k]; !exist {
+		s.kvList[k] = v
+		return len(s.kvList[k])
+	}
+	s.kvList[k] = append(v, s.kvList[k]...)
+
+	return len(s.kvList[k])
+}
+
+func (s *store) LRange(k string, start, end int) []string {
 	s.RLock()
 	defer s.RUnlock()
 
