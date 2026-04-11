@@ -1,6 +1,7 @@
 package store
 
 import (
+	"log"
 	"sync"
 	"time"
 )
@@ -9,7 +10,7 @@ type Store interface {
 	Get(k string) (string, bool)
 
 	Set(k, v string, ttl int64)
-	SetList(k, v string) int
+	SetList(k string, v []string) int
 }
 
 type store struct {
@@ -60,15 +61,18 @@ func (s *store) Set(k, v string, ttl int64) {
 	s.kv[k] = r
 }
 
-func (s *store) SetList(k, v string) int {
+func (s *store) SetList(k string, v []string) int {
 	s.Lock()
 	defer s.Unlock()
 
 	if _, exist := s.kvList[k]; !exist {
-		s.kvList[k] = []string{v}
+		s.kvList[k] = v
+		log.Println(s.kvList[k])
 		return len(s.kvList[k])
 	}
-	s.kvList[k] = append(s.kvList[k], v)
+	s.kvList[k] = append(s.kvList[k], v...)
+
+	log.Println(s.kvList[k])
 
 	return len(s.kvList[k])
 }
