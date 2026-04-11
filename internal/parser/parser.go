@@ -64,27 +64,37 @@ func ParseSetArgs(cmd Command) SetArgs {
 		TTL:   -1,
 	}
 
-	if len(cmd.Args) == 2 {
+	if len(cmd.Args) < 4 {
 		return setArgs
 	}
 
 	// The PX option is used to set a key's expiry time in milliseconds. After the key expires, it's no longer accessible.
 	switch strings.ToLower(cmd.Args[2]) {
 	case "px":
-		if ttl, err := strconv.ParseInt(cmd.Args[2], 10, 64); err != nil {
-			if ttl > 0 {
-				setArgs.TTL = ttl
-			}
+		ttl, err := strconv.ParseInt(cmd.Args[3], 10, 64)
+		if err != nil {
+			slog.Error("convertion px value int failed: ", "error", err)
+			return setArgs
 		}
+
+		if ttl > 0 {
+			setArgs.TTL = ttl
+		}
+
 		return setArgs
 
 	// The PX option is used to set a key's expiry time in seconds. After the key expires, it's no longer accessible.
 	case "ex":
-		if ttl, err := strconv.ParseInt(cmd.Args[2], 10, 64); err != nil {
-			if ttl > 0 {
-				setArgs.TTL = ttl * 1000
-			}
+		ttl, err := strconv.ParseInt(cmd.Args[3], 10, 64)
+		if err != nil {
+			slog.Error("convertion px value int failed: ", "error", err)
+			return setArgs
 		}
+
+		if ttl > 0 {
+			setArgs.TTL = ttl * 1000
+		}
+
 		return setArgs
 	}
 	return setArgs

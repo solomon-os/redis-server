@@ -36,9 +36,7 @@ func (h *Handler) handleCommand(cmd parser.Command) string {
 		}
 		return resp.BulkString(cmd.Args[0])
 	case "SET":
-		args := parser.ParseSetArgs(cmd)
-		h.store.Set(cmd.Args[0], cmd.Args[1], args.TTL)
-		return resp.SimpleString("OK")
+		return h.handleSet(cmd)
 	case "GET":
 		val, exist := h.store.Get(cmd.Args[0])
 		if !exist {
@@ -48,4 +46,10 @@ func (h *Handler) handleCommand(cmd parser.Command) string {
 	default:
 		return resp.Error("unknown command")
 	}
+}
+
+func (h *Handler) handleSet(cmd parser.Command) string {
+	args := parser.ParseSetArgs(cmd)
+	h.store.Set(cmd.Args[0], cmd.Args[1], args.TTL)
+	return resp.SimpleString("OK")
 }
