@@ -39,14 +39,14 @@ func (s *store) Set(k, v string, ttl int64) {
 
 	var timer *time.Timer
 
-	if ttl > 0 {
-		// check if key already exists and stop previous timer
-		if r, ok := s.data[k]; ok {
-			// timer
-			if r.timer != nil {
-				r.timer.Stop()
-			}
+	// check if key already exists and stop previous timer
+	if r, ok := s.data[k]; ok {
+		if r.timer != nil {
+			r.timer.Stop()
 		}
+	}
+
+	if ttl > 0 {
 		timer = time.AfterFunc(time.Duration(ttl)*time.Millisecond, s.removeKey(k))
 	}
 
