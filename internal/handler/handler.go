@@ -36,10 +36,8 @@ func (h *Handler) handleCommand(cmd parser.Command) string {
 		}
 		return resp.BulkString(cmd.Args[0])
 	case "SET":
-		setArgs := parser.ParseSetArgs(cmd)
-		if err := h.store.Set(cmd.Args[0], cmd.Args[1]); err != nil {
-			return resp.Error("insertion failed")
-		}
+		args := parser.ParseSetArgs(cmd)
+		h.store.Set(cmd.Args[0], cmd.Args[1], args.TTL)
 		return resp.SimpleString("OK")
 	case "GET":
 		val, exist := h.store.Get(cmd.Args[0])
