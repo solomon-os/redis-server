@@ -37,6 +37,10 @@ func (h *Handler) handleCommand(cmd parser.Command) string {
 		return resp.BulkString(cmd.Args[0])
 	case "SET":
 		return h.handleSet(cmd)
+
+	case "RPUSH":
+		return h.handleRPush(cmd)
+
 	case "GET":
 		val, exist := h.store.Get(cmd.Args[0])
 		if !exist {
@@ -52,4 +56,10 @@ func (h *Handler) handleSet(cmd parser.Command) string {
 	args := parser.ParseSetArgs(cmd)
 	h.store.Set(cmd.Args[0], cmd.Args[1], args.TTL)
 	return resp.SimpleString("OK")
+}
+
+func (h *Handler) handleRPush(cmd parser.Command) string {
+	args := parser.ParseRPushArgs(cmd)
+	size := h.store.SetList(args.ListKey, args.ListValue)
+	return resp.Integer(size)
 }
