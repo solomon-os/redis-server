@@ -19,6 +19,11 @@ type SetArgs struct {
 	TTL   int64 // stores expire in milliseconds
 }
 
+type RPushArgs struct {
+	ListKey   string
+	ListValue string
+}
+
 func Parse(input string) (Command, error) {
 	firstChar := input[0]
 
@@ -36,6 +41,9 @@ func Parse(input string) (Command, error) {
 // *<number-of-elements>\r\n<element-1>...<element-n>
 func parseArray(input string) (Command, error) {
 	slog.Info(fmt.Sprintf("%q", input))
+	// I know, I know there's a more efficient way for parsing the string instead of splitting
+	// and allocating an array for each segment of the string
+	// but this is not an hft project my guy, it's a toy project and it's not that serious.
 	strArray := strings.Split(input, "\r\n")
 	size, err := strconv.Atoi(strArray[0][1:])
 	if err != nil {
@@ -83,7 +91,7 @@ func ParseSetArgs(cmd Command) SetArgs {
 
 		return setArgs
 
-	// The PX option is used to set a key's expiry time in seconds. After the key expires, it's no longer accessible.
+	// The EX option is used to set a key's expiry time in seconds. After the key expires, it's no longer accessible.
 	case "ex":
 		ttl, err := strconv.ParseInt(cmd.Args[3], 10, 64)
 		if err != nil {
@@ -98,4 +106,13 @@ func ParseSetArgs(cmd Command) SetArgs {
 		return setArgs
 	}
 	return setArgs
+}
+
+func ParseRPushArgs(cmd Command) RPushArgs {
+	rPushArgs := RPushArgs{
+		ListKey:   cmd.Args[0],
+		ListValue: cmd.Args[1],
+	}
+
+	return rPushArgs
 }

@@ -9,10 +9,12 @@ type Store interface {
 	Get(k string) (string, bool)
 
 	Set(k, v string, ttl int64)
+	SetList(k, v string) int
 }
 
 type store struct {
-	data map[string]record
+	kv     map[string]record
+	kvList map[string][]string
 	sync.RWMutex
 }
 
@@ -22,14 +24,14 @@ type record struct {
 }
 
 func New() Store {
-	return &store{data: make(map[string]record)}
+	return &store{kv: make(map[string]record), kvList: make(map[string][]string)}
 }
 
 func (s *store) Get(k string) (string, bool) {
 	s.RLock()
 	defer s.RUnlock()
 
-	r, ok := s.data[k]
+	r, ok := s.kv[k]
 	return r.value, ok
 }
 
@@ -40,7 +42,7 @@ func (s *store) Set(k, v string, ttl int64) {
 	var timer *time.Timer
 
 	// check if key already exists and stop previous timer
-	if r, ok := s.data[k]; ok {
+	if r, ok := s.kv[k]; ok {
 		if r.timer != nil {
 			r.timer.Stop()
 		}
@@ -55,7 +57,20 @@ func (s *store) Set(k, v string, ttl int64) {
 		timer: timer,
 	}
 
-	s.data[k] = r
+	s.kv[k] = r
+}
+
+func (s *store) SetList(k, v string) int {
+	s.Lock()
+	defer s.Unlock()
+
+	if _, exist := s.kvList[k]; !exist {
+		s.kvList[k] = []string{v}
+		return len(s.kvList[k])
+	}
+	s.kvList[k] = append(s.kvList[k], v)
+
+	return len(s.kvList[k])
 }
 
 func (s *store) removeKey(key string) func() {
@@ -63,6 +78,6 @@ func (s *store) removeKey(key string) func() {
 		s.Lock()
 		defer s.Unlock()
 
-		delete(s.data, key)
+		delete(s.kv, key)
 	}
 }
