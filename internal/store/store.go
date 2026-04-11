@@ -69,6 +69,7 @@ func (s *store) RPush(k string, v []string) int {
 
 	if _, exist := s.kvList[k]; !exist {
 		s.kvList[k] = v
+		return len(s.kvList[k])
 	}
 	s.kvList[k] = append(s.kvList[k], v...)
 
