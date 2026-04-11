@@ -19,7 +19,7 @@ type SetArgs struct {
 	TTL   int64 // stores expire in milliseconds
 }
 
-type RPushArgs struct {
+type PushArgs struct {
 	ListKey   string
 	ListValue []string
 }
@@ -114,8 +114,8 @@ func ParseSetArgs(cmd Command) SetArgs {
 	return setArgs
 }
 
-func ParseRPushArgs(cmd Command) RPushArgs {
-	rPushArgs := RPushArgs{
+func ParsePushArgs(cmd Command) PushArgs {
+	rPushArgs := PushArgs{
 		ListKey:   cmd.Args[0],
 		ListValue: cmd.Args[1:],
 	}
