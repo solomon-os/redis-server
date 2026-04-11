@@ -29,12 +29,9 @@ func (h *Handler) Handle(raw string) (string, error) {
 func (h *Handler) handleCommand(cmd parser.Command) string {
 	switch cmd.Name {
 	case "PING":
-		return resp.SimpleString("PONG")
+		return h.handlePing(cmd)
 	case "ECHO":
-		if len(cmd.Args) < 1 {
-			return resp.Error("wrong number of arguments for 'echo' command")
-		}
-		return resp.BulkString(cmd.Args[0])
+		return h.handleEcho(cmd)
 	case "SET":
 		return h.handleSet(cmd)
 
@@ -42,14 +39,29 @@ func (h *Handler) handleCommand(cmd parser.Command) string {
 		return h.handleRPush(cmd)
 
 	case "GET":
-		val, exist := h.store.Get(cmd.Args[0])
-		if !exist {
-			return resp.NullBulkString()
-		}
-		return resp.BulkString(val)
+		return h.handleGet(cmd)
 	default:
 		return resp.Error("unknown command")
 	}
+}
+
+func (h *Handler) handlePing(_ parser.Command) string {
+	return resp.SimpleString("PONG")
+}
+
+func (h *Handler) handleEcho(cmd parser.Command) string {
+	if len(cmd.Args) < 1 {
+		return resp.Error("wrong number of arguments for 'echo' command")
+	}
+	return resp.BulkString(cmd.Args[0])
+}
+
+func (h *Handler) handleGet(cmd parser.Command) string {
+	val, exist := h.store.Get(cmd.Args[0])
+	if !exist {
+		return resp.NullBulkString()
+	}
+	return resp.BulkString(val)
 }
 
 func (h *Handler) handleSet(cmd parser.Command) string {
