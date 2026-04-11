@@ -21,7 +21,7 @@ type SetArgs struct {
 
 type RPushArgs struct {
 	ListKey   string
-	ListValue string
+	ListValue []string
 }
 
 func Parse(input string) (Command, error) {
@@ -111,7 +111,7 @@ func ParseSetArgs(cmd Command) SetArgs {
 func ParseRPushArgs(cmd Command) RPushArgs {
 	rPushArgs := RPushArgs{
 		ListKey:   cmd.Args[0],
-		ListValue: cmd.Args[1],
+		ListValue: cmd.Args[1:],
 	}
 
 	return rPushArgs
