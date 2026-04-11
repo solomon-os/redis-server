@@ -85,7 +85,11 @@ func (s *store) GetListRange(k string, start, end int) []string {
 	}
 
 	if start < 0 {
-		start = 0
+		start = max(0, len(list)+start)
+	}
+
+	if end < 0 {
+		end = max(0, len(list)+end)
 	}
 
 	if start > end || start >= len(list) {
