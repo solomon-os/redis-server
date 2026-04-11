@@ -24,6 +24,12 @@ type RPushArgs struct {
 	ListValue []string
 }
 
+type LRangeArgs struct {
+	Key   string
+	Start int // index to start listing
+	End   int // index to stop listing
+}
+
 func Parse(input string) (Command, error) {
 	firstChar := input[0]
 
@@ -115,4 +121,24 @@ func ParseRPushArgs(cmd Command) RPushArgs {
 	}
 
 	return rPushArgs
+}
+
+func ParseLRangeArgs(cmd Command) LRangeArgs {
+	lRangeArgs := LRangeArgs{
+		Key:   cmd.Args[0],
+		Start: parseInt(cmd.Args[1]),
+		End:   parseInt(cmd.Args[2]),
+	}
+
+	return lRangeArgs
+}
+
+func parseInt(s string) int {
+	val, err := strconv.Atoi(s)
+	if err != nil {
+		slog.Error("convertion to int failed", "value", s, "error", err)
+		return -1
+	}
+
+	return val
 }
