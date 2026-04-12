@@ -38,6 +38,8 @@ type PopArgs struct {
 	Key       string
 	Length    int
 	Arguments bool
+	Block     bool
+	Timeout   int
 }
 
 func Parse(input string) (Command, error) {
@@ -158,6 +160,13 @@ func ParsePopArgs(cmd Command) PopArgs {
 	}
 
 	return args
+}
+
+func ParseBPopArgs(cmd Command) PopArgs {
+	return PopArgs{
+		Key:     cmd.Args[0],
+		Timeout: parseInt(cmd.Args[1]),
+	}
 }
 
 func parseInt(s string) int {
