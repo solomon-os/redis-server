@@ -206,7 +206,7 @@ func (s *store) BLPop(k string, timeout float64) []string {
 		select {
 		case <-listener:
 			poppedItems = s.LPop(k, 1)
-		case <-time.After(time.Duration(timeout) * time.Second):
+		case <-time.After(time.Duration(timeout * float64(time.Second))):
 		}
 	}
 
