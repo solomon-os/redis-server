@@ -35,7 +35,9 @@ type LenArgs struct {
 }
 
 type PopArgs struct {
-	Key string
+	Key       string
+	Length    int
+	Arguments bool
 }
 
 func Parse(input string) (Command, error) {
@@ -144,9 +146,18 @@ func ParseLenArgs(cmd Command) LenArgs {
 }
 
 func ParsePopArgs(cmd Command) PopArgs {
-	return PopArgs{
-		Key: cmd.Args[0],
+	args := PopArgs{
+		Key:       cmd.Args[0],
+		Length:    0,
+		Arguments: false,
 	}
+
+	if len(cmd.Args) > 1 {
+		args.Length = parseInt(cmd.Args[1])
+		args.Arguments = true
+	}
+
+	return args
 }
 
 func parseInt(s string) int {
