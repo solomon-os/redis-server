@@ -55,6 +55,9 @@ func (h *Handler) handleCommand(cmd parser.Command) string {
 	case "LPOP":
 		return h.handleLPop(cmd)
 
+	case "BLPOP":
+		return h.handleBLPop(cmd)
+
 	default:
 		return resp.Error("unknown command")
 	}
@@ -126,4 +129,17 @@ func (h *Handler) handleLPop(cmd parser.Command) string {
 	popedItems := h.store.LPop(args.Key, args.Length)
 
 	return resp.BulkStringArray(popedItems)
+}
+
+func (h *Handler) handleBLPop(cmd parser.Command) string {
+	args := parser.ParseBPopArgs(cmd)
+	if args.Timeout < 0 {
+		return resp.Error("value not an interger")
+	}
+	items := h.store.BLPop(args.Key, args.Timeout)
+	if items == nil {
+		return resp.NullBulkString()
+	}
+
+	return resp.BulkStringArray(items)
 }

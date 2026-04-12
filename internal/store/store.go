@@ -14,11 +14,13 @@ type Store interface {
 	LRange(k string, start, end int) []string
 	LLen(k string) int
 	LPop(k string, length int) []string
+	BLPop(k string, timeout int) []string
 }
 
 type store struct {
-	kv     map[string]record
-	kvList map[string][]string
+	kv        map[string]record
+	kvList    map[string][]string
+	listeners map[string][]chan string
 	sync.RWMutex
 }
 
@@ -28,7 +30,11 @@ type record struct {
 }
 
 func New() Store {
-	return &store{kv: make(map[string]record), kvList: make(map[string][]string)}
+	return &store{
+		kv:        make(map[string]record),
+		kvList:    make(map[string][]string),
+		listeners: make(map[string][]chan string),
+	}
 }
 
 func (s *store) Get(k string) (string, bool) {
@@ -70,7 +76,22 @@ func (s *store) RPush(k string, v []string) int {
 	defer s.Unlock()
 
 	s.ensureList(k)
+
 	s.kvList[k] = append(s.kvList[k], v...)
+
+	// check listeners and fire
+	if listeners, exist := s.listeners[k]; exist {
+		n := min(len(v), len(listeners))
+		listenersCopy := make([]chan string, n)
+		copy(listenersCopy, listeners[:n])
+
+		go func(listenersCopy []chan string) {
+			for _, listener := range listenersCopy {
+				listener <- "notify"
+			}
+		}(listenersCopy)
+	}
+
 	return len(s.kvList[k])
 }
 
@@ -81,14 +102,22 @@ func (s *store) LPush(k string, v []string) int {
 	defer s.Unlock()
 
 	s.ensureList(k)
-	s.kvList[k] = append(v, s.kvList[k]...)
-	return len(s.kvList[k])
-}
 
-func (s *store) ensureList(k string) {
-	if _, exist := s.kvList[k]; !exist {
-		s.kvList[k] = []string{}
+	s.kvList[k] = append(v, s.kvList[k]...)
+
+	if listeners, exist := s.listeners[k]; exist {
+		n := min(len(v), len(listeners))
+		listenersCopy := make([]chan string, n)
+		copy(listenersCopy, listeners[:n])
+
+		go func(listenersCopy []chan string) {
+			for _, listener := range listenersCopy {
+				listener <- "notify"
+			}
+		}(listenersCopy)
 	}
+
+	return len(s.kvList[k])
 }
 
 func (s *store) LRange(k string, start, end int) []string {
@@ -153,6 +182,77 @@ func (s *store) LPop(k string, length int) []string {
 	}
 
 	return items
+}
+
+func (s *store) BLPop(k string, timeout int) []string {
+	s.Lock()
+
+	_, exist := s.kvList[k]
+	if exist {
+		s.Unlock()
+		return s.LPop(k, 1)
+	}
+
+	// check a listener and add to queue so it gets served first
+	listener := s.createListener(k)
+	s.Unlock()
+
+	var poppedItems []string
+
+	if timeout == 0 {
+		<-listener
+		poppedItems = s.LPop(k, 1)
+	} else {
+		select {
+		case <-listener:
+			poppedItems = s.LPop(k, 1)
+		case <-time.After(time.Duration(timeout) * time.Second):
+		}
+	}
+
+	s.Lock()
+	s.removeListener(k, listener)
+	s.Unlock()
+
+	if poppedItems == nil {
+		return nil
+	}
+
+	return []string{k, poppedItems[0]}
+}
+
+func (s *store) ensureList(k string) {
+	if _, exist := s.kvList[k]; !exist {
+		s.kvList[k] = []string{}
+	}
+}
+
+func (s *store) createListener(k string) chan string {
+	listener := make(chan string)
+	if _, exist := s.listeners[k]; exist {
+		s.listeners[k] = append(s.listeners[k], listener)
+		return listener
+	}
+
+	s.listeners[k] = []chan string{listener}
+
+	return listener
+}
+
+func (s *store) removeListener(k string, currListener chan string) {
+	listeners := make([]chan string, 0, len(s.listeners[k]))
+	for _, listener := range s.listeners[k] {
+		if listener != currListener {
+			listeners = append(listeners, listener)
+		}
+	}
+
+	s.listeners[k] = listeners
+	if len(s.listeners[k]) == 0 {
+		delete(s.listeners, k)
+	}
+
+	close(currListener)
 }
 
 func (s *store) removeKey(key string) func() {
