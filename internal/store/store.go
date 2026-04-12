@@ -13,7 +13,7 @@ type Store interface {
 	RPush(k string, v []string) int
 	LRange(k string, start, end int) []string
 	LLen(k string) int
-	LPop(k string) string
+	LPop(k string, length int) []string
 }
 
 type store struct {
@@ -132,19 +132,27 @@ func (s *store) LLen(k string) int {
 }
 
 // LPop removes an element from the left (beginning) of the list
-func (s *store) LPop(k string) string {
+func (s *store) LPop(k string, length int) []string {
 	s.Lock()
 	defer s.Unlock()
 
 	list, exist := s.kvList[k]
-	if !exist {
-		return ""
+	if !exist || len(list) == 0 {
+		return nil
 	}
 
-	item := list[0]
-	s.kvList[k] = list[1:]
+	if length > len(list) {
+		length = len(list)
+	}
 
-	return item
+	items := list[:length]
+	s.kvList[k] = list[length:]
+
+	if len(s.kvList[k]) == 0 {
+		delete(s.kvList, k)
+	}
+
+	return items
 }
 
 func (s *store) removeKey(key string) func() {

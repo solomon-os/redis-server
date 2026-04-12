@@ -111,9 +111,19 @@ func (h *Handler) handleLLen(cmd parser.Command) string {
 
 func (h *Handler) handleLPop(cmd parser.Command) string {
 	args := parser.ParsePopArgs(cmd)
-	popedItem := h.store.LPop(args.Key)
-	if popedItem == "" {
-		return resp.NullBulkString()
+	if !args.Arguments {
+		popedItem := h.store.LPop(args.Key, 1)
+		if len(popedItem) == 0 {
+			return resp.NullBulkString()
+		}
+		return resp.BulkString(popedItem[0])
 	}
-	return resp.BulkString(popedItem)
+
+	if args.Arguments && args.Length < 0 {
+		return resp.Error("value not an interger or out of range")
+	}
+
+	popedItems := h.store.LPop(args.Key, args.Length)
+
+	return resp.BulkStringArray(popedItems)
 }
