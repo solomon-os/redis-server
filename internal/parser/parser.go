@@ -39,7 +39,7 @@ type PopArgs struct {
 	Length    int
 	Arguments bool
 	Block     bool
-	Timeout   int
+	Timeout   float64
 }
 
 func Parse(input string) (Command, error) {
@@ -165,12 +165,22 @@ func ParsePopArgs(cmd Command) PopArgs {
 func ParseBPopArgs(cmd Command) PopArgs {
 	return PopArgs{
 		Key:     cmd.Args[0],
-		Timeout: parseInt(cmd.Args[1]),
+		Timeout: parseFloat(cmd.Args[1]),
 	}
 }
 
 func parseInt(s string) int {
 	val, err := strconv.Atoi(s)
+	if err != nil {
+		slog.Error("convertion to int failed", "value", s, "error", err)
+		return -1
+	}
+
+	return val
+}
+
+func parseFloat(s string) float64 {
+	val, err := strconv.ParseFloat(s, 64)
 	if err != nil {
 		slog.Error("convertion to int failed", "value", s, "error", err)
 		return -1

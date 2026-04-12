@@ -14,7 +14,7 @@ type Store interface {
 	LRange(k string, start, end int) []string
 	LLen(k string) int
 	LPop(k string, length int) []string
-	BLPop(k string, timeout int) []string
+	BLPop(k string, timeout float64) []string
 }
 
 type store struct {
@@ -184,7 +184,7 @@ func (s *store) LPop(k string, length int) []string {
 	return items
 }
 
-func (s *store) BLPop(k string, timeout int) []string {
+func (s *store) BLPop(k string, timeout float64) []string {
 	s.Lock()
 
 	_, exist := s.kvList[k]
