@@ -34,6 +34,10 @@ type LenArgs struct {
 	Key string
 }
 
+type PopArgs struct {
+	Key string
+}
+
 func Parse(input string) (Command, error) {
 	firstChar := input[0]
 
@@ -135,6 +139,12 @@ func ParseLRangeArgs(cmd Command) LRangeArgs {
 
 func ParseLenArgs(cmd Command) LenArgs {
 	return LenArgs{
+		Key: cmd.Args[0],
+	}
+}
+
+func ParsePopArgs(cmd Command) PopArgs {
+	return PopArgs{
 		Key: cmd.Args[0],
 	}
 }

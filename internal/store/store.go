@@ -13,6 +13,7 @@ type Store interface {
 	RPush(k string, v []string) int
 	LRange(k string, start, end int) []string
 	LLen(k string) int
+	LPop(k string) string
 }
 
 type store struct {
@@ -68,12 +69,8 @@ func (s *store) RPush(k string, v []string) int {
 	s.Lock()
 	defer s.Unlock()
 
-	if _, exist := s.kvList[k]; !exist {
-		s.kvList[k] = v
-		return len(s.kvList[k])
-	}
+	s.ensureList(k)
 	s.kvList[k] = append(s.kvList[k], v...)
-
 	return len(s.kvList[k])
 }
 
@@ -83,13 +80,15 @@ func (s *store) LPush(k string, v []string) int {
 	s.Lock()
 	defer s.Unlock()
 
-	if _, exist := s.kvList[k]; !exist {
-		s.kvList[k] = v
-		return len(s.kvList[k])
-	}
+	s.ensureList(k)
 	s.kvList[k] = append(v, s.kvList[k]...)
-
 	return len(s.kvList[k])
+}
+
+func (s *store) ensureList(k string) {
+	if _, exist := s.kvList[k]; !exist {
+		s.kvList[k] = []string{}
+	}
 }
 
 func (s *store) LRange(k string, start, end int) []string {
@@ -121,10 +120,31 @@ func (s *store) LRange(k string, start, end int) []string {
 }
 
 func (s *store) LLen(k string) int {
-	if _, exist := s.kvList[k]; !exist {
+	s.RLock()
+	defer s.RUnlock()
+
+	list, exist := s.kvList[k]
+
+	if !exist {
 		return 0
 	}
-	return len(s.kvList[k])
+	return len(list)
+}
+
+// LPop removes an element from the left (beginning) of the list
+func (s *store) LPop(k string) string {
+	s.Lock()
+	defer s.Unlock()
+
+	list, exist := s.kvList[k]
+	if !exist {
+		return ""
+	}
+
+	item := list[0]
+	s.kvList[k] = list[1:]
+
+	return item
 }
 
 func (s *store) removeKey(key string) func() {

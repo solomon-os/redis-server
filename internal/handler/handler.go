@@ -52,6 +52,9 @@ func (h *Handler) handleCommand(cmd parser.Command) string {
 	case "LLEN":
 		return h.handleLLen(cmd)
 
+	case "LPOP":
+		return h.handleLPop(cmd)
+
 	default:
 		return resp.Error("unknown command")
 	}
@@ -104,4 +107,13 @@ func (h *Handler) handleLLen(cmd parser.Command) string {
 	args := parser.ParseLenArgs(cmd)
 	len := h.store.LLen(args.Key)
 	return resp.Integer(len)
+}
+
+func (h *Handler) handleLPop(cmd parser.Command) string {
+	args := parser.ParsePopArgs(cmd)
+	popedItem := h.store.LPop(args.Key)
+	if popedItem == "" {
+		return resp.NullBulkString()
+	}
+	return resp.BulkString(popedItem)
 }
