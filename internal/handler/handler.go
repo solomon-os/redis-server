@@ -138,7 +138,7 @@ func (h *Handler) handleBLPop(cmd parser.Command) string {
 	}
 	items := h.store.BLPop(args.Key, args.Timeout)
 	if items == nil {
-		return resp.NullBulkString()
+		return resp.BulkStringArray([]string{})
 	}
 
 	return resp.BulkStringArray(items)
