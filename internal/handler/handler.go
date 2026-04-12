@@ -37,6 +37,9 @@ func (h *Handler) handleCommand(cmd parser.Command) string {
 	case "SET":
 		return h.handleSet(cmd)
 
+	case "GET":
+		return h.handleGet(cmd)
+
 	case "RPUSH":
 		return h.handleRPush(cmd)
 
@@ -46,8 +49,9 @@ func (h *Handler) handleCommand(cmd parser.Command) string {
 	case "LPUSH":
 		return h.handleLPush(cmd)
 
-	case "GET":
-		return h.handleGet(cmd)
+	case "LLEN":
+		return h.handleLLen(cmd)
+
 	default:
 		return resp.Error("unknown command")
 	}
@@ -80,7 +84,7 @@ func (h *Handler) handleSet(cmd parser.Command) string {
 
 func (h *Handler) handleRPush(cmd parser.Command) string {
 	args := parser.ParsePushArgs(cmd)
-	size := h.store.RPush(args.ListKey, args.ListValue)
+	size := h.store.RPush(args.Key, args.Value)
 	return resp.Integer(size)
 }
 
@@ -92,6 +96,12 @@ func (h *Handler) handleLRange(cmd parser.Command) string {
 
 func (h *Handler) handleLPush(cmd parser.Command) string {
 	args := parser.ParsePushArgs(cmd)
-	size := h.store.LPush(args.ListKey, args.ListValue)
+	size := h.store.LPush(args.Key, args.Value)
 	return resp.Integer(size)
+}
+
+func (h *Handler) handleLLen(cmd parser.Command) string {
+	args := parser.ParseLenArgs(cmd)
+	len := h.store.LLen(args.Key)
+	return resp.Integer(len)
 }

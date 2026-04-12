@@ -20,14 +20,18 @@ type SetArgs struct {
 }
 
 type PushArgs struct {
-	ListKey   string
-	ListValue []string
+	Key   string
+	Value []string
 }
 
 type LRangeArgs struct {
 	Key   string
 	Start int // index to start listing
 	End   int // index to stop listing
+}
+
+type LenArgs struct {
+	Key string
 }
 
 func Parse(input string) (Command, error) {
@@ -115,22 +119,24 @@ func ParseSetArgs(cmd Command) SetArgs {
 }
 
 func ParsePushArgs(cmd Command) PushArgs {
-	rPushArgs := PushArgs{
-		ListKey:   cmd.Args[0],
-		ListValue: cmd.Args[1:],
+	return PushArgs{
+		Key:   cmd.Args[0],
+		Value: cmd.Args[1:],
 	}
-
-	return rPushArgs
 }
 
 func ParseLRangeArgs(cmd Command) LRangeArgs {
-	lRangeArgs := LRangeArgs{
+	return LRangeArgs{
 		Key:   cmd.Args[0],
 		Start: parseInt(cmd.Args[1]),
 		End:   parseInt(cmd.Args[2]),
 	}
+}
 
-	return lRangeArgs
+func ParseLenArgs(cmd Command) LenArgs {
+	return LenArgs{
+		Key: cmd.Args[0],
+	}
 }
 
 func parseInt(s string) int {

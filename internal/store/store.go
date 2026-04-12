@@ -12,6 +12,7 @@ type Store interface {
 	LPush(k string, v []string) int
 	RPush(k string, v []string) int
 	LRange(k string, start, end int) []string
+	LLen(k string) int
 }
 
 type store struct {
@@ -117,6 +118,13 @@ func (s *store) LRange(k string, start, end int) []string {
 	}
 
 	return list[start : end+1]
+}
+
+func (s *store) LLen(k string) int {
+	if _, exist := s.kvList[k]; !exist {
+		return 0
+	}
+	return len(s.kvList[k])
 }
 
 func (s *store) removeKey(key string) func() {
