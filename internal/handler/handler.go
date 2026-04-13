@@ -141,5 +141,7 @@ func (h *Handler) handleBLPop(cmd parser.Command) string {
 		return resp.BulkStringArray([]string{})
 	}
 
+	fmt.Println(items)
+
 	return resp.BulkStringArray(items)
 }
