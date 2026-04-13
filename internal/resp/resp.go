@@ -13,12 +13,15 @@ func BulkString(s string) string {
 	return fmt.Sprintf("$%d\r\n%s\r\n", len(s), s)
 }
 
-func BulkStringArray(s []string) string {
-	var str strings.Builder
-
+func NullOrBulkStringArray(s []string) string {
 	if len(s) == 0 {
 		return "*-1\r\n"
 	}
+	return BulkStringArray(s)
+}
+
+func BulkStringArray(s []string) string {
+	var str strings.Builder
 
 	fmt.Fprintf(&str, "*%d\r\n", len(s))
 
