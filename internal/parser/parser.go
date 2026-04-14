@@ -42,6 +42,10 @@ type PopArgs struct {
 	Timeout   float64
 }
 
+type TypeArgs struct {
+	Key string
+}
+
 func Parse(input string) (Command, error) {
 	firstChar := input[0]
 
@@ -166,6 +170,12 @@ func ParseBPopArgs(cmd Command) PopArgs {
 	return PopArgs{
 		Key:     cmd.Args[0],
 		Timeout: parseFloat(cmd.Args[1]),
+	}
+}
+
+func ParseTypeArgs(cmd Command) TypeArgs {
+	return TypeArgs{
+		Key: cmd.Args[0],
 	}
 }
 

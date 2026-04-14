@@ -58,6 +58,9 @@ func (h *Handler) handleCommand(cmd parser.Command) string {
 	case "BLPOP":
 		return h.handleBLPop(cmd)
 
+	case "TYPE":
+		return h.handleType(cmd)
+
 	default:
 		return resp.Error("unknown command")
 	}
@@ -144,4 +147,15 @@ func (h *Handler) handleBLPop(cmd parser.Command) string {
 	fmt.Println(items)
 
 	return resp.BulkStringArray(items)
+}
+
+func (h *Handler) handleType(cmd parser.Command) string {
+	args := parser.ParseTypeArgs(cmd)
+	keyType := h.store.KeyType(args.Key)
+
+	if keyType == "" {
+		return resp.SimpleString("none")
+	}
+
+	return resp.SimpleString(keyType)
 }

@@ -15,6 +15,7 @@ type Store interface {
 	LLen(k string) int
 	LPop(k string, length int) []string
 	BLPop(k string, timeout float64) []string
+	KeyType(k string) string
 }
 
 type store struct {
@@ -219,6 +220,18 @@ func (s *store) BLPop(k string, timeout float64) []string {
 	}
 
 	return []string{k, poppedItems[0]}
+}
+
+func (s *store) KeyType(k string) string {
+	if _, exist := s.kv[k]; exist {
+		return "string"
+	}
+
+	if _, exist := s.kvList[k]; exist {
+		return "list"
+	}
+
+	return ""
 }
 
 func (s *store) ensureList(k string) {
