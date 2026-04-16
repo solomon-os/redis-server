@@ -61,6 +61,9 @@ func (h *Handler) handleCommand(cmd parser.Command) string {
 	case "TYPE":
 		return h.handleType(cmd)
 
+	case "XADD":
+		return h.handleXAdd(cmd)
+
 	default:
 		return resp.Error("unknown command")
 	}
@@ -144,8 +147,6 @@ func (h *Handler) handleBLPop(cmd parser.Command) string {
 		return resp.NullOrBulkStringArray([]string{})
 	}
 
-	fmt.Println(items)
-
 	return resp.BulkStringArray(items)
 }
 
@@ -158,4 +159,15 @@ func (h *Handler) handleType(cmd parser.Command) string {
 	}
 
 	return resp.SimpleString(keyType)
+}
+
+func (h *Handler) handleXAdd(cmd parser.Command) string {
+	args, err := parser.ParseStreamArgs(cmd)
+	if err != nil {
+		return resp.Error(fmt.Sprintf("xadd command failed: %v", err))
+	}
+
+	id := h.store.CreateOrAddToStream(args.Key, args.ID, args.Fields)
+
+	return resp.BulkStringArray([]string{id})
 }

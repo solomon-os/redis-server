@@ -46,6 +46,12 @@ type TypeArgs struct {
 	Key string
 }
 
+type StreamArgs struct {
+	Key    string
+	ID     string
+	Fields map[string]string
+}
+
 func Parse(input string) (Command, error) {
 	firstChar := input[0]
 
@@ -177,6 +183,29 @@ func ParseTypeArgs(cmd Command) TypeArgs {
 	return TypeArgs{
 		Key: cmd.Args[0],
 	}
+}
+
+func ParseStreamArgs(cmd Command) (StreamArgs, error) {
+	args := StreamArgs{
+		Key: cmd.Args[0],
+		ID:  cmd.Args[1],
+	}
+
+	fields := make(map[string]string)
+
+	entries := cmd.Args[2:]
+
+	if len(entries)%2 != 0 {
+		return args, errors.New("wrong number of arguments")
+	}
+
+	for i := 0; i < len(entries); i += 2 {
+		fields[entries[i]] = entries[i+1]
+	}
+
+	args.Fields = fields
+
+	return args, nil
 }
 
 func parseInt(s string) int {
