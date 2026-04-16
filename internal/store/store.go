@@ -35,10 +35,28 @@ type record struct {
 	timer *time.Timer
 }
 
+type streamID struct {
+	ms  int
+	seq int
+}
+
+func (id streamID) String() string {
+	return strconv.Itoa(id.ms) + "-" + strconv.Itoa(id.seq)
+}
+
 type StreamEntry struct {
-	id     string
+	id     streamID
 	fields map[string]string
 }
+
+var (
+	errStreamIDTooSmall = errors.New(
+		"The ID specified in XADD is equal or smaller than the target stream top item",
+	)
+	errStreamIDZero   = errors.New("The ID specified in XADD must be greater than 0-0")
+	errStreamIDFormat = errors.New("invalid id format")
+	errStreamIDType   = errors.New("invalid id type")
+)
 
 func New() Store {
 	return &store{
@@ -249,54 +267,22 @@ func (s *store) KeyType(k string) string {
 	return ""
 }
 
-func (s *store) CreateOrAddToStream(k, id string, fields map[string]string) (string, error) {
-	if id == "0-0" {
-		return "", errors.New("The ID specified in XADD must be greater than 0-0")
+func (s *store) CreateOrAddToStream(k, req string, fields map[string]string) (string, error) {
+	s.Lock()
+	defer s.Unlock()
+
+	var last *streamID
+	if entries := s.streams[k]; len(entries) > 0 {
+		last = &entries[len(entries)-1].id
 	}
 
-	idArray := strings.Split(id, "-")
-
-	idMillisecond, err := strconv.Atoi(idArray[0])
+	id, err := resolveStreamID(req, last)
 	if err != nil {
-		return "", errors.New("invalid id type")
-	}
-
-	idCounter, err := strconv.Atoi(idArray[1])
-	if err != nil {
-		return "", errors.New("invalid id type")
-	}
-
-	// check if stream exists and validaate the id
-	if _, exist := s.streams[k]; exist {
-		lastEntry := s.streams[k][len(s.streams[k])-1]
-		lastEntryIdArray := strings.Split(lastEntry.id, "-")
-
-		lastIdMillisecond, err := strconv.Atoi(lastEntryIdArray[0])
-		if err != nil {
-			return "", errors.New("invalid id type")
-		}
-
-		lastIdCounter, err := strconv.Atoi(lastEntryIdArray[1])
-		if err != nil {
-			return "", errors.New("invalid id type")
-		}
-
-		if idMillisecond < lastIdMillisecond {
-			return "", errors.New(
-				"The ID specified in XADD is equal or smaller than the target stream top item",
-			)
-		}
-
-		if idCounter <= lastIdCounter {
-			return "", errors.New(
-				"The ID specified in XADD is equal or smaller than the target stream top item",
-			)
-		}
-
+		return "", err
 	}
 
 	s.streams[k] = append(s.streams[k], StreamEntry{id: id, fields: fields})
-	return id, nil
+	return id.String(), nil
 }
 
 func (s *store) ensureList(k string) {
@@ -340,4 +326,78 @@ func (s *store) removeKey(key string) func() {
 
 		delete(s.kv, key)
 	}
+}
+
+func parseStreamID(s string) (ms, seq int, msAuto, seqAuto bool, err error) {
+	if s == "*" {
+		msAuto = true
+		return
+	}
+
+	parts := strings.SplitN(s, "-", 2)
+	if len(parts) != 2 {
+		err = errStreamIDFormat
+		return
+	}
+
+	ms, err = strconv.Atoi(parts[0])
+	if err != nil {
+		err = errStreamIDType
+		return
+	}
+
+	if parts[1] == "*" {
+		seqAuto = true
+		return
+	}
+
+	seq, err = strconv.Atoi(parts[1])
+	if err != nil {
+		err = errStreamIDType
+		return
+	}
+
+	return
+}
+
+func resolveStreamID(req string, last *streamID) (streamID, error) {
+	ms, seq, msAuto, seqAuto, err := parseStreamID(req)
+	if err != nil {
+		return streamID{}, err
+	}
+
+	switch {
+	case msAuto:
+		ms = int(time.Now().UnixMilli())
+		if last != nil && last.ms >= ms {
+			ms = last.ms
+			seq = last.seq + 1
+		} else {
+			seq = 0
+		}
+	case seqAuto:
+		switch {
+		case last == nil:
+			if ms == 0 {
+				seq = 1
+			} else {
+				seq = 0
+			}
+		case ms == last.ms:
+			seq = last.seq + 1
+		case ms > last.ms:
+			seq = 0
+		default:
+			return streamID{}, errStreamIDTooSmall
+		}
+	}
+
+	id := streamID{ms: ms, seq: seq}
+	if id.ms == 0 && id.seq == 0 {
+		return streamID{}, errStreamIDZero
+	}
+	if last != nil && (id.ms < last.ms || (id.ms == last.ms && id.seq <= last.seq)) {
+		return streamID{}, errStreamIDTooSmall
+	}
+	return id, nil
 }
