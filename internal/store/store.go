@@ -293,6 +293,8 @@ func (s *store) CreateOrAddToStream(k, id string, fields map[string]string) (str
 			)
 		}
 
+		s.streams[k] = append(s.streams[k], StreamEntry{id: id, fields: fields})
+
 		return id, nil
 	}
 	s.streams[k] = append(s.streams[k], StreamEntry{id: id, fields: fields})
