@@ -239,6 +239,10 @@ func (s *store) KeyType(k string) string {
 		return "list"
 	}
 
+	if _, exist := s.streams[k]; exist {
+		return "stream"
+	}
+
 	return ""
 }
 
