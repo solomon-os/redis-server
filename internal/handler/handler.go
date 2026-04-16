@@ -169,5 +169,5 @@ func (h *Handler) handleXAdd(cmd parser.Command) string {
 
 	id := h.store.CreateOrAddToStream(args.Key, args.ID, args.Fields)
 
-	return resp.BulkStringArray([]string{id})
+	return resp.BulkString(id)
 }
