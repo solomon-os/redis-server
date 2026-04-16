@@ -16,11 +16,13 @@ type Store interface {
 	LPop(k string, length int) []string
 	BLPop(k string, timeout float64) []string
 	KeyType(k string) string
+	CreateOrAddToStream(k, id string, fields map[string]string) string
 }
 
 type store struct {
 	kv        map[string]record
 	kvList    map[string][]string
+	streams   map[string][]StreamEntry
 	listeners map[string][]chan string
 	sync.RWMutex
 }
@@ -30,10 +32,16 @@ type record struct {
 	timer *time.Timer
 }
 
+type StreamEntry struct {
+	id     string
+	fields map[string]string
+}
+
 func New() Store {
 	return &store{
 		kv:        make(map[string]record),
 		kvList:    make(map[string][]string),
+		streams:   make(map[string][]StreamEntry),
 		listeners: make(map[string][]chan string),
 	}
 }
@@ -232,6 +240,11 @@ func (s *store) KeyType(k string) string {
 	}
 
 	return ""
+}
+
+func (s *store) CreateOrAddToStream(k, id string, fields map[string]string) string {
+	s.streams[k] = append(s.streams[k], StreamEntry{id: id, fields: fields})
+	return id
 }
 
 func (s *store) ensureList(k string) {
