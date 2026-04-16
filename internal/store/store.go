@@ -1,7 +1,10 @@
 package store
 
 import (
+	"errors"
 	"slices"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
@@ -16,7 +19,7 @@ type Store interface {
 	LPop(k string, length int) []string
 	BLPop(k string, timeout float64) []string
 	KeyType(k string) string
-	CreateOrAddToStream(k, id string, fields map[string]string) string
+	CreateOrAddToStream(k, id string, fields map[string]string) (string, error)
 }
 
 type store struct {
@@ -246,9 +249,54 @@ func (s *store) KeyType(k string) string {
 	return ""
 }
 
-func (s *store) CreateOrAddToStream(k, id string, fields map[string]string) string {
+func (s *store) CreateOrAddToStream(k, id string, fields map[string]string) (string, error) {
+	if id == "0-0" {
+		return "", errors.New("The ID specified in XADD must be greater than 0-0")
+	}
+
+	idArray := strings.Split(id, "-")
+
+	idMillisecond, err := strconv.Atoi(idArray[0])
+	if err != nil {
+		return "", errors.New("invalid id type")
+	}
+
+	idCounter, err := strconv.Atoi(idArray[1])
+	if err != nil {
+		return "", errors.New("invalid id type")
+	}
+
+	// check if stream exists and validaate the id
+	if _, exist := s.streams[k]; exist {
+		lastEntry := s.streams[k][len(s.streams[k])-1]
+		lastEntryIdArray := strings.Split(lastEntry.id, "-")
+
+		lastIdMillisecond, err := strconv.Atoi(lastEntryIdArray[0])
+		if err != nil {
+			return "", errors.New("invalid id type")
+		}
+
+		lastIdCounter, err := strconv.Atoi(lastEntryIdArray[1])
+		if err != nil {
+			return "", errors.New("invalid id type")
+		}
+
+		if idMillisecond <= lastIdMillisecond {
+			return "", errors.New(
+				"the ID specified in XADD is equal or smaller than the target stream top item",
+			)
+		}
+
+		if idCounter <= lastIdCounter {
+			return "", errors.New(
+				"The ID specified in XADD is equal or smaller than the target stream top item",
+			)
+		}
+
+		return id, nil
+	}
 	s.streams[k] = append(s.streams[k], StreamEntry{id: id, fields: fields})
-	return id
+	return id, nil
 }
 
 func (s *store) ensureList(k string) {

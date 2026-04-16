@@ -167,7 +167,10 @@ func (h *Handler) handleXAdd(cmd parser.Command) string {
 		return resp.Error(fmt.Sprintf("xadd command failed: %v", err))
 	}
 
-	id := h.store.CreateOrAddToStream(args.Key, args.ID, args.Fields)
+	id, err := h.store.CreateOrAddToStream(args.Key, args.ID, args.Fields)
+	if err != nil {
+		return resp.Error(err.Error())
+	}
 
 	return resp.BulkString(id)
 }
