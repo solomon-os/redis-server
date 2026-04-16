@@ -281,7 +281,7 @@ func (s *store) CreateOrAddToStream(k, id string, fields map[string]string) (str
 			return "", errors.New("invalid id type")
 		}
 
-		if idMillisecond <= lastIdMillisecond {
+		if idMillisecond < lastIdMillisecond {
 			return "", errors.New(
 				"the ID specified in XADD is equal or smaller than the target stream top item",
 			)
@@ -289,7 +289,7 @@ func (s *store) CreateOrAddToStream(k, id string, fields map[string]string) (str
 
 		if idCounter <= lastIdCounter {
 			return "", errors.New(
-				"The ID specified in XADD is equal or smaller than the target stream top item",
+				"the ID specified in XADD is equal or smaller than the target stream top item",
 			)
 		}
 
