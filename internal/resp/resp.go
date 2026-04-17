@@ -5,6 +5,11 @@ import (
 	"strings"
 )
 
+type StreamReply struct {
+	ID     string
+	Fields []string
+}
+
 func SimpleString(s string) string {
 	return fmt.Sprintf("+%s\r\n", s)
 }
@@ -29,6 +34,19 @@ func BulkStringArray(s []string) string {
 		str.WriteString(BulkString(item))
 	}
 
+	return str.String()
+}
+
+func XRangeReply(s []StreamReply) string {
+	var str strings.Builder
+
+	fmt.Fprintf(&str, "*%d\r\n", len(s))
+
+	for i := range s {
+		fmt.Fprintf(&str, "*%d\r\n", 2)
+		str.WriteString(BulkString(s[i].ID))
+		str.WriteString(BulkStringArray(s[i].Fields))
+	}
 	return str.String()
 }
 

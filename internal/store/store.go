@@ -20,6 +20,7 @@ type Store interface {
 	BLPop(k string, timeout float64) []string
 	KeyType(k string) string
 	CreateOrAddToStream(k, id string, fields map[string]string) (string, error)
+	RangeStream(k string, start, end string) ([]StreamEntry, error)
 }
 
 type store struct {
@@ -45,8 +46,18 @@ func (id streamID) String() string {
 }
 
 type StreamEntry struct {
-	id     streamID
-	fields map[string]string
+	ID     streamID
+	Fields map[string]string
+}
+
+func (st StreamEntry) FlatFields() []string {
+	fields := make([]string, 0, len(st.Fields)*2)
+
+	for k, v := range st.Fields {
+		fields = append(fields, k, v)
+	}
+
+	return fields
 }
 
 var (
@@ -178,6 +189,52 @@ func (s *store) LRange(k string, start, end int) []string {
 	return list[start : end+1]
 }
 
+func (s *store) RangeStream(k string, start, end string) ([]StreamEntry, error,
+) {
+	s.RLock()
+	defer s.RUnlock()
+
+	startId, startSeq, _, _, err := parseStreamID(start)
+	if startId == 0 && start != "0" && err != nil {
+		return nil, err
+	}
+
+	endId, endSeq, _, _, err := parseStreamID(end)
+	if end != "0" && endId == 0 && err != nil {
+		return nil, err
+	}
+
+	entries := []StreamEntry{}
+
+	if _, exist := s.streams[k]; !exist {
+		return entries, nil
+	}
+
+	for i := range s.streams[k] {
+		stream := s.streams[k][i]
+		entry := StreamEntry{
+			ID:     stream.ID,
+			Fields: stream.Fields,
+		}
+
+		if stream.ID.ms > startId && stream.ID.ms < endId {
+			entries = append(entries, entry)
+			continue
+		}
+
+		if stream.ID.ms == startId && stream.ID.seq >= startSeq {
+			entries = append(entries, entry)
+			continue
+		}
+
+		if stream.ID.ms == endId && stream.ID.seq <= endSeq {
+			entries = append(entries, entry)
+		}
+
+	}
+	return entries, nil
+}
+
 func (s *store) LLen(k string) int {
 	s.RLock()
 	defer s.RUnlock()
@@ -273,7 +330,7 @@ func (s *store) CreateOrAddToStream(k, req string, fields map[string]string) (st
 
 	var last *streamID
 	if entries := s.streams[k]; len(entries) > 0 {
-		last = &entries[len(entries)-1].id
+		last = &entries[len(entries)-1].ID
 	}
 
 	id, err := resolveStreamID(req, last)
@@ -281,7 +338,7 @@ func (s *store) CreateOrAddToStream(k, req string, fields map[string]string) (st
 		return "", err
 	}
 
-	s.streams[k] = append(s.streams[k], StreamEntry{id: id, fields: fields})
+	s.streams[k] = append(s.streams[k], StreamEntry{ID: id, Fields: fields})
 	return id.String(), nil
 }
 
@@ -335,14 +392,15 @@ func parseStreamID(s string) (ms, seq int, msAuto, seqAuto bool, err error) {
 	}
 
 	parts := strings.SplitN(s, "-", 2)
-	if len(parts) != 2 {
-		err = errStreamIDFormat
-		return
-	}
 
 	ms, err = strconv.Atoi(parts[0])
 	if err != nil {
 		err = errStreamIDType
+		return
+	}
+
+	if len(parts) != 2 {
+		err = errStreamIDFormat
 		return
 	}
 
