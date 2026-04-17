@@ -67,6 +67,9 @@ func (h *Handler) handleCommand(cmd parser.Command) string {
 	case "XRANGE":
 		return h.handleXRange(cmd)
 
+	case "XREAD":
+		return h.handleXRead(cmd)
+
 	default:
 		return resp.Error("unknown command")
 	}
@@ -179,7 +182,10 @@ func (h *Handler) handleXAdd(cmd parser.Command) string {
 }
 
 func (h *Handler) handleXRange(cmd parser.Command) string {
-	args := parser.ParseXRangeArgs(cmd)
+	args, err := parser.ParseXRangeArgs(cmd)
+	if err != nil {
+		return resp.Error(err.Error())
+	}
 	entries, err := h.store.RangeStream(args.Key, args.Start, args.End)
 	if err != nil {
 		return resp.Error(err.Error())
@@ -194,7 +200,34 @@ func (h *Handler) handleXRange(cmd parser.Command) string {
 		})
 	}
 
-	str := resp.XRangeReply(out)
-	fmt.Printf("%q", str)
-	return str
+	return resp.XRangeReply(out)
+}
+
+func (h *Handler) handleXRead(cmd parser.Command) string {
+	args, err := parser.ParseXReadArgs(cmd)
+	if err != nil {
+		return resp.Error(err.Error())
+	}
+
+	// * tells rangstream to ignore the start id
+	entries, err := h.store.RangeStream(args.Key, args.Start, "*")
+	if err != nil {
+		return resp.Error(err.Error())
+	}
+
+	out := make([]resp.ReadStreamsReply, 0, 1)
+
+	out = append(out, resp.ReadStreamsReply{
+		Key:           args.Key,
+		StreamReplies: make([]resp.StreamReply, 0, len(entries)),
+	})
+
+	for i := range entries {
+		out[0].StreamReplies = append(out[0].StreamReplies, resp.StreamReply{
+			ID:     entries[i].ID.String(),
+			Fields: entries[i].FlatFields(),
+		})
+	}
+
+	return resp.XReadReply(out)
 }

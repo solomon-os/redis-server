@@ -36,6 +36,11 @@ type XRangeArgs struct {
 	End   string
 }
 
+type XReadArgs struct {
+	Key   string
+	Start string
+}
+
 type LenArgs struct {
 	Key string
 }
@@ -157,12 +162,32 @@ func ParseRangeArgs(cmd Command) RangeArgs {
 	}
 }
 
-func ParseXRangeArgs(cmd Command) XRangeArgs {
-	return XRangeArgs{
-		Key:   cmd.Args[0],
-		Start: cmd.Args[1],
-		End:   cmd.Args[2],
+func ParseXRangeArgs(cmd Command) (XRangeArgs, error) {
+	args := XRangeArgs{}
+	if len(cmd.Args) < 2 {
+		return args, errors.New("invalid command arguments")
 	}
+
+	args.Key = cmd.Args[0]
+	args.Start = cmd.Args[1]
+	args.End = ""
+
+	if len(cmd.Args) > 2 {
+		args.End = cmd.Args[2]
+	}
+	return args, nil
+}
+
+func ParseXReadArgs(cmd Command) (XReadArgs, error) {
+	args := XReadArgs{}
+	if len(cmd.Args) < 3 {
+		return args, errors.New("wrong command arguments for xread")
+	}
+
+	args.Key = cmd.Args[1]
+	args.Start = cmd.Args[2]
+
+	return args, nil
 }
 
 func ParseLenArgs(cmd Command) LenArgs {

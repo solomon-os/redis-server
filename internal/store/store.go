@@ -205,7 +205,8 @@ func (s *store) RangeStream(k string, start, end string) ([]StreamEntry, error,
 		return nil, err
 	}
 
-	if end == "+" {
+	// * is for the xread command. it tells it to exlude the start id
+	if end == "+" || end == "*" {
 		endId, endSeq = math.MaxInt, math.MaxInt
 	}
 
@@ -227,9 +228,13 @@ func (s *store) RangeStream(k string, start, end string) ([]StreamEntry, error,
 			continue
 		}
 
-		if stream.ID.ms == startId && stream.ID.seq >= startSeq && stream.ID.seq <= endSeq {
-			entries = append(entries, entry)
-			continue
+		if stream.ID.ms == startId {
+			if end != "*" && stream.ID.seq >= startSeq && stream.ID.seq <= endSeq {
+				entries = append(entries, entry)
+				continue
+			} else if stream.ID.seq > startSeq && stream.ID.seq <= endSeq {
+				entries = append(entries, entry)
+			}
 		}
 
 		if stream.ID.ms == endId && stream.ID.seq >= startSeq && stream.ID.seq <= endSeq {
