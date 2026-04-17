@@ -195,7 +195,7 @@ func (s *store) RangeStream(k string, start, end string) ([]StreamEntry, error,
 	defer s.RUnlock()
 
 	startId, startSeq, _, _, err := parseStreamID(start)
-	if startId == 0 && start != "0" && err != nil {
+	if start != "0" && start != "-" && startId == 0 && err != nil {
 		return nil, err
 	}
 
