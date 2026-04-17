@@ -2,6 +2,7 @@ package store
 
 import (
 	"errors"
+	"math"
 	"slices"
 	"strconv"
 	"strings"
@@ -200,8 +201,12 @@ func (s *store) RangeStream(k string, start, end string) ([]StreamEntry, error,
 	}
 
 	endId, endSeq, _, _, err := parseStreamID(end)
-	if end != "0" && endId == 0 && err != nil {
+	if end != "0" && end != "+" && endId == 0 && err != nil {
 		return nil, err
+	}
+
+	if end == "+" {
+		endId, endSeq = math.MaxInt, math.MaxInt
 	}
 
 	entries := []StreamEntry{}
