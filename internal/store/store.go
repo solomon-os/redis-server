@@ -227,7 +227,7 @@ func (s *store) RangeStream(k string, start, end string) ([]StreamEntry, error,
 			continue
 		}
 
-		if stream.ID.ms == startId && stream.ID.seq >= startSeq {
+		if stream.ID.ms == startId && stream.ID.seq >= startSeq && stream.ID.seq <= endSeq {
 			entries = append(entries, entry)
 			continue
 		}
