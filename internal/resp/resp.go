@@ -10,6 +10,11 @@ type StreamReply struct {
 	Fields []string
 }
 
+type ReadStreamsReply struct {
+	Key           string
+	StreamReplies []StreamReply
+}
+
 func SimpleString(s string) string {
 	return fmt.Sprintf("+%s\r\n", s)
 }
@@ -47,6 +52,20 @@ func XRangeReply(s []StreamReply) string {
 		str.WriteString(BulkString(s[i].ID))
 		str.WriteString(BulkStringArray(s[i].Fields))
 	}
+	return str.String()
+}
+
+func XReadReply(s []ReadStreamsReply) string {
+	var str strings.Builder
+
+	fmt.Fprintf(&str, "*%d\r\n", len(s))
+
+	for i := range s {
+		fmt.Fprintf(&str, "*%d\r\n", 2)
+		str.WriteString(BulkString(s[i].Key))
+		str.WriteString(XRangeReply(s[i].StreamReplies))
+	}
+
 	return str.String()
 }
 
