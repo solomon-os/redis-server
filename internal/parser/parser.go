@@ -24,10 +24,16 @@ type PushArgs struct {
 	Value []string
 }
 
-type LRangeArgs struct {
+type RangeArgs struct {
 	Key   string
 	Start int // index to start listing
 	End   int // index to stop listing
+}
+
+type XRangeArgs struct {
+	Key   string
+	Start string
+	End   string
 }
 
 type LenArgs struct {
@@ -143,11 +149,19 @@ func ParsePushArgs(cmd Command) PushArgs {
 	}
 }
 
-func ParseLRangeArgs(cmd Command) LRangeArgs {
-	return LRangeArgs{
+func ParseRangeArgs(cmd Command) RangeArgs {
+	return RangeArgs{
 		Key:   cmd.Args[0],
 		Start: parseInt(cmd.Args[1]),
 		End:   parseInt(cmd.Args[2]),
+	}
+}
+
+func ParseXRangeArgs(cmd Command) XRangeArgs {
+	return XRangeArgs{
+		Key:   cmd.Args[0],
+		Start: cmd.Args[1],
+		End:   cmd.Args[2],
 	}
 }
 

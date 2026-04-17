@@ -64,6 +64,9 @@ func (h *Handler) handleCommand(cmd parser.Command) string {
 	case "XADD":
 		return h.handleXAdd(cmd)
 
+	case "XRANGE":
+		return h.handleXRange(cmd)
+
 	default:
 		return resp.Error("unknown command")
 	}
@@ -101,7 +104,7 @@ func (h *Handler) handleRPush(cmd parser.Command) string {
 }
 
 func (h *Handler) handleLRange(cmd parser.Command) string {
-	args := parser.ParseLRangeArgs(cmd)
+	args := parser.ParseRangeArgs(cmd)
 	list := h.store.LRange(args.Key, args.Start, args.End)
 	return resp.BulkStringArray(list)
 }
@@ -173,4 +176,25 @@ func (h *Handler) handleXAdd(cmd parser.Command) string {
 	}
 
 	return resp.BulkString(id)
+}
+
+func (h *Handler) handleXRange(cmd parser.Command) string {
+	args := parser.ParseXRangeArgs(cmd)
+	entries, err := h.store.RangeStream(args.Key, args.Start, args.End)
+	if err != nil {
+		return resp.Error(err.Error())
+	}
+
+	out := make([]resp.StreamReply, 0, len(entries))
+
+	for i := range entries {
+		out = append(out, resp.StreamReply{
+			ID:     entries[i].ID.String(),
+			Fields: entries[i].FlatFields(),
+		})
+	}
+
+	str := resp.XRangeReply(out)
+	fmt.Printf("%q", str)
+	return str
 }
