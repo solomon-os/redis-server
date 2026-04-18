@@ -178,14 +178,23 @@ func ParseXRangeArgs(cmd Command) (XRangeArgs, error) {
 	return args, nil
 }
 
-func ParseXReadArgs(cmd Command) (XReadArgs, error) {
-	args := XReadArgs{}
+func ParseXReadArgs(cmd Command) ([]XReadArgs, error) {
 	if len(cmd.Args) < 3 {
-		return args, errors.New("wrong command arguments for xread")
+		return nil, errors.New("wrong command arguments for xread")
 	}
 
-	args.Key = cmd.Args[1]
-	args.Start = cmd.Args[2]
+	arr := cmd.Args[1:]
+	n := len(arr)
+
+	if n%2 != 0 {
+		return nil, errors.New("wrong command arguments for xread")
+	}
+
+	args := make([]XReadArgs, 0, n/2)
+
+	for i, j := 0, n/2; j < n; i, j = i+1, j+1 {
+		args = append(args, XReadArgs{Key: arr[i], Start: arr[j]})
+	}
 
 	return args, nil
 }
