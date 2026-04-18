@@ -37,6 +37,12 @@ type XRangeArgs struct {
 }
 
 type XReadArgs struct {
+	Command string
+	Timeout int
+	Streams []streamArgs
+}
+
+type streamArgs struct {
 	Key   string
 	Start string
 }
@@ -178,25 +184,47 @@ func ParseXRangeArgs(cmd Command) (XRangeArgs, error) {
 	return args, nil
 }
 
-func ParseXReadArgs(cmd Command) ([]XReadArgs, error) {
+func ParseXReadArgs(cmd Command) (XReadArgs, error) {
+	args := XReadArgs{}
+
 	if len(cmd.Args) < 3 {
-		return nil, errors.New("wrong command arguments for xread")
+		return args, errors.New("wrong command arguments for xread")
 	}
 
-	arr := cmd.Args[1:]
-	n := len(arr)
+	switch strings.ToUpper(cmd.Args[0]) {
+	case "STREAMS":
+		args.Command = "STREAMS"
+		arr := cmd.Args[1:]
+		n := len(arr)
 
-	if n%2 != 0 {
-		return nil, errors.New("wrong command arguments for xread")
+		if n%2 != 0 {
+			return args, errors.New("wrong command arguments for xread")
+		}
+
+		args.Streams = make([]streamArgs, 0, n/2)
+
+		for i, j := 0, n/2; j < n; i, j = i+1, j+1 {
+			args.Streams = append(args.Streams, streamArgs{Key: arr[i], Start: arr[j]})
+		}
+
+		return args, nil
+
+	case "BLOCK":
+		args.Command = "BLOCK"
+		timeout, err := strconv.Atoi(cmd.Args[1])
+		if err != nil {
+			return args, errors.New("invalid timeout argument")
+		}
+		args.Timeout = timeout
+
+		recursedArg, err := ParseXReadArgs(Command{Name: cmd.Name, Args: cmd.Args[2:]})
+		if err != nil {
+			return args, err
+		}
+		args.Streams = recursedArg.Streams
 	}
 
-	args := make([]XReadArgs, 0, n/2)
-
-	for i, j := 0, n/2; j < n; i, j = i+1, j+1 {
-		args = append(args, XReadArgs{Key: arr[i], Start: arr[j]})
-	}
-
-	return args, nil
+	return args, errors.New("invalid xread command")
 }
 
 func ParseLenArgs(cmd Command) LenArgs {

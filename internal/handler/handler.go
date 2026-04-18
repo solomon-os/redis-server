@@ -2,7 +2,6 @@ package handler
 
 import (
 	"fmt"
-	"log"
 
 	"github.com/codecrafters-io/redis-starter-go/internal/parser"
 	"github.com/codecrafters-io/redis-starter-go/internal/resp"
@@ -174,7 +173,7 @@ func (h *Handler) handleXAdd(cmd parser.Command) string {
 		return resp.Error(fmt.Sprintf("xadd command failed: %v", err))
 	}
 
-	id, err := h.store.CreateOrAddToStream(args.Key, args.ID, args.Fields)
+	id, err := h.store.SetStream(args.Key, args.ID, args.Fields)
 	if err != nil {
 		return resp.Error(err.Error())
 	}
@@ -210,29 +209,70 @@ func (h *Handler) handleXRead(cmd parser.Command) string {
 		return resp.Error(err.Error())
 	}
 
-	out := make([]resp.ReadStreamsReply, len(args))
-	log.Println(args)
+	switch args.Command {
 
-	for i := range args {
-		// * tells rangstream to ignore the start id
-		entries, err := h.store.RangeStream(args[i].Key, args[i].Start, "*")
-		if err != nil {
-			return resp.Error(err.Error())
+	case "STREAMS":
+
+		out := make([]resp.ReadStreamsReply, len(args.Streams))
+
+		for i := range args.Streams {
+			// * tells rangstream to ignore the start id
+			entries, err := h.store.RangeStream(args.Streams[i].Key, args.Streams[i].Start, "*")
+			if err != nil {
+				return resp.Error(err.Error())
+			}
+
+			out[i] = resp.ReadStreamsReply{
+				Key:           args.Streams[i].Key,
+				StreamReplies: make([]resp.StreamReply, 0, len(entries)),
+			}
+
+			for j := range entries {
+				out[i].StreamReplies = append(out[i].StreamReplies, resp.StreamReply{
+					ID:     entries[j].ID.String(),
+					Fields: entries[j].FlatFields(),
+				})
+			}
+
 		}
 
-		out[i] = resp.ReadStreamsReply{
-			Key:           args[i].Key,
-			StreamReplies: make([]resp.StreamReply, 0, len(entries)),
+		return resp.XReadReply(out)
+
+	case "BLOCK":
+
+		out := make([]resp.ReadStreamsReply, len(args.Streams))
+
+		for i := range args.Streams {
+			// * tells rangstream to ignore the start id
+			entries, err := h.store.RangeStreamBlock(
+				args.Streams[i].Key,
+				args.Streams[i].Start,
+				float64(args.Timeout),
+			)
+			if err != nil {
+				return resp.Error(err.Error())
+			}
+
+			out[i] = resp.ReadStreamsReply{
+				Key:           args.Streams[i].Key,
+				StreamReplies: make([]resp.StreamReply, 0, len(entries)),
+			}
+
+			for j := range entries {
+				out[i].StreamReplies = append(out[i].StreamReplies, resp.StreamReply{
+					ID:     entries[j].ID.String(),
+					Fields: entries[j].FlatFields(),
+				})
+			}
+
 		}
 
-		for j := range entries {
-			out[i].StreamReplies = append(out[i].StreamReplies, resp.StreamReply{
-				ID:     entries[j].ID.String(),
-				Fields: entries[j].FlatFields(),
-			})
+		if len(out) == 0 {
+			return resp.NullOrBulkStringArray(nil)
 		}
 
+		return resp.XReadReply(out)
 	}
 
-	return resp.XReadReply(out)
+	return resp.Error("xread command not supported")
 }
