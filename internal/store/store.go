@@ -20,15 +20,17 @@ type Store interface {
 	LPop(k string, length int) []string
 	BLPop(k string, timeout float64) []string
 	KeyType(k string) string
-	CreateOrAddToStream(k, id string, fields map[string]string) (string, error)
+	SetStream(k, id string, fields map[string]string) (string, error)
 	RangeStream(k string, start, end string) ([]StreamEntry, error)
+	RangeStreamBlock(k, start string, timeout float64) ([]StreamEntry, error)
 }
 
 type store struct {
-	kv            map[string]record
-	kvList        map[string][]string
-	streams       map[string][]StreamEntry
-	listListeners map[string][]chan string
+	kv              map[string]record
+	kvList          map[string][]string
+	streams         map[string][]StreamEntry
+	listListeners   map[string][]chan string
+	streamListeners map[string][]chan StreamEntry
 	sync.RWMutex
 }
 
@@ -72,10 +74,11 @@ var (
 
 func New() Store {
 	return &store{
-		kv:            make(map[string]record),
-		kvList:        make(map[string][]string),
-		streams:       make(map[string][]StreamEntry),
-		listListeners: make(map[string][]chan string),
+		kv:              make(map[string]record),
+		kvList:          make(map[string][]string),
+		streams:         make(map[string][]StreamEntry),
+		listListeners:   make(map[string][]chan string),
+		streamListeners: make(map[string][]chan StreamEntry),
 	}
 }
 
@@ -195,11 +198,7 @@ func (s *store) LRange(k string, start, end int) []string {
 	return list[start : end+1]
 }
 
-func (s *store) RangeStream(k string, start, end string) ([]StreamEntry, error,
-) {
-	s.RLock()
-	defer s.RUnlock()
-
+func (s *store) rangeStreamUnlocked(k string, start, end string) ([]StreamEntry, error) {
 	startId, startSeq, _, _, err := parseStreamID(start)
 	if start != "0" && start != "-" && startId == 0 && err != nil {
 		return nil, err
@@ -248,6 +247,54 @@ func (s *store) RangeStream(k string, start, end string) ([]StreamEntry, error,
 
 	}
 	return entries, nil
+}
+
+func (s *store) RangeStream(k string, start, end string) ([]StreamEntry, error,
+) {
+	s.RLock()
+	defer s.RUnlock()
+
+	return s.rangeStreamUnlocked(k, start, end)
+}
+
+func (s *store) RangeStreamBlock(k, start string, timeout float64) ([]StreamEntry, error) {
+	s.Lock()
+
+	if _, exist := s.streams[k]; exist && len(s.streams[k]) > 0 {
+		streams, err := s.rangeStreamUnlocked(k, start, "*")
+
+		if len(streams) > 0 {
+			s.Unlock()
+			return streams, err
+		}
+	}
+
+	var streams StreamEntry
+	var got bool
+
+	listener := s.createStreamListenerUnlocked(k)
+
+	s.Unlock()
+
+	select {
+	case streams = <-listener:
+		got = true
+	case <-time.After(time.Duration(timeout * float64(time.Millisecond))):
+		s.Lock()
+		select {
+		case streams = <-listener:
+			got = true
+		default:
+		}
+		s.removeStreamListener(k, listener)
+		s.Unlock()
+	}
+
+	if !got {
+		return nil, nil
+	}
+
+	return []StreamEntry{streams}, nil
 }
 
 func (s *store) LLen(k string) int {
@@ -301,7 +348,7 @@ func (s *store) BLPop(k string, timeout float64) []string {
 		return []string{k, items[0]}
 	}
 
-	listener := s.createListener(k)
+	listener := s.createListListener(k)
 	s.Unlock()
 
 	var item string
@@ -323,7 +370,7 @@ func (s *store) BLPop(k string, timeout float64) []string {
 				got = true
 			default:
 			}
-			s.removeListener(k, listener)
+			s.removeListListener(k, listener)
 			s.Unlock()
 		}
 	}
@@ -351,7 +398,7 @@ func (s *store) KeyType(k string) string {
 	return ""
 }
 
-func (s *store) CreateOrAddToStream(k, req string, fields map[string]string) (string, error) {
+func (s *store) SetStream(k, req string, fields map[string]string) (string, error) {
 	s.Lock()
 	defer s.Unlock()
 
@@ -365,7 +412,16 @@ func (s *store) CreateOrAddToStream(k, req string, fields map[string]string) (st
 		return "", err
 	}
 
-	s.streams[k] = append(s.streams[k], StreamEntry{ID: id, Fields: fields})
+	stream := StreamEntry{ID: id, Fields: fields}
+
+	if listeners, exist := s.streamListeners[k]; exist {
+		for i := range listeners {
+			listeners[i] <- stream
+		}
+		delete(s.streamListeners, k)
+	}
+
+	s.streams[k] = append(s.streams[k], stream)
 	return id.String(), nil
 }
 
@@ -375,7 +431,7 @@ func (s *store) ensureList(k string) {
 	}
 }
 
-func (s *store) createListener(k string) chan string {
+func (s *store) createListListener(k string) chan string {
 	listener := make(chan string, 1)
 	if _, exist := s.listListeners[k]; exist {
 		s.listListeners[k] = append(s.listListeners[k], listener)
@@ -387,7 +443,7 @@ func (s *store) createListener(k string) chan string {
 	return listener
 }
 
-func (s *store) removeListener(k string, currListener chan string) {
+func (s *store) removeListListener(k string, currListener chan string) {
 	listeners := make([]chan string, 0, len(s.listListeners[k])-1)
 	for _, listener := range s.listListeners[k] {
 		if listener != currListener {
@@ -398,6 +454,34 @@ func (s *store) removeListener(k string, currListener chan string) {
 	s.listListeners[k] = listeners
 	if len(s.listListeners[k]) == 0 {
 		delete(s.listListeners, k)
+	}
+
+	close(currListener)
+}
+
+func (s *store) createStreamListenerUnlocked(k string) chan StreamEntry {
+	listener := make(chan StreamEntry, 1)
+	if _, exist := s.streamListeners[k]; exist {
+		s.streamListeners[k] = append(s.streamListeners[k], listener)
+		return listener
+	}
+
+	s.streamListeners[k] = []chan StreamEntry{listener}
+
+	return listener
+}
+
+func (s *store) removeStreamListener(k string, currListener chan StreamEntry) {
+	listeners := make([]chan StreamEntry, 0, len(s.streamListeners[k])-1)
+	for _, listener := range s.streamListeners[k] {
+		if listener != currListener {
+			listeners = append(listeners, listener)
+		}
+	}
+
+	s.streamListeners[k] = listeners
+	if len(s.streamListeners[k]) == 0 {
+		delete(s.streamListeners, k)
 	}
 
 	close(currListener)
