@@ -209,24 +209,27 @@ func (h *Handler) handleXRead(cmd parser.Command) string {
 		return resp.Error(err.Error())
 	}
 
-	// * tells rangstream to ignore the start id
-	entries, err := h.store.RangeStream(args.Key, args.Start, "*")
-	if err != nil {
-		return resp.Error(err.Error())
-	}
+	out := make([]resp.ReadStreamsReply, len(args))
 
-	out := make([]resp.ReadStreamsReply, 0, 1)
+	for i := range args {
+		// * tells rangstream to ignore the start id
+		entries, err := h.store.RangeStream(args[i].Key, args[i].Start, "*")
+		if err != nil {
+			return resp.Error(err.Error())
+		}
 
-	out = append(out, resp.ReadStreamsReply{
-		Key:           args.Key,
-		StreamReplies: make([]resp.StreamReply, 0, len(entries)),
-	})
+		out[i] = resp.ReadStreamsReply{
+			Key:           args[i].Key,
+			StreamReplies: make([]resp.StreamReply, 0, len(entries)),
+		}
 
-	for i := range entries {
-		out[0].StreamReplies = append(out[0].StreamReplies, resp.StreamReply{
-			ID:     entries[i].ID.String(),
-			Fields: entries[i].FlatFields(),
-		})
+		for j := range entries {
+			out[i].StreamReplies = append(out[j].StreamReplies, resp.StreamReply{
+				ID:     entries[j].ID.String(),
+				Fields: entries[j].FlatFields(),
+			})
+		}
+
 	}
 
 	return resp.XReadReply(out)
