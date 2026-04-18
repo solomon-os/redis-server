@@ -2,6 +2,7 @@ package handler
 
 import (
 	"fmt"
+	"log"
 
 	"github.com/codecrafters-io/redis-starter-go/internal/parser"
 	"github.com/codecrafters-io/redis-starter-go/internal/resp"
@@ -210,6 +211,7 @@ func (h *Handler) handleXRead(cmd parser.Command) string {
 	}
 
 	out := make([]resp.ReadStreamsReply, len(args))
+	log.Println(args)
 
 	for i := range args {
 		// * tells rangstream to ignore the start id
@@ -224,7 +226,7 @@ func (h *Handler) handleXRead(cmd parser.Command) string {
 		}
 
 		for j := range entries {
-			out[i].StreamReplies = append(out[j].StreamReplies, resp.StreamReply{
+			out[i].StreamReplies = append(out[i].StreamReplies, resp.StreamReply{
 				ID:     entries[j].ID.String(),
 				Fields: entries[j].FlatFields(),
 			})
