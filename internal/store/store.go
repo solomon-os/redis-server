@@ -265,14 +265,16 @@ func (s *store) RangeStreamBlock(
 ) ([]StreamEntry, error) {
 	s.Lock()
 
-	streams, err := s.rangeStreamUnlocked(k, start, "*")
-	if err != nil {
-		return nil, err
-	}
+	if start != "$" {
+		streams, err := s.rangeStreamUnlocked(k, start, "*")
+		if err != nil {
+			return nil, err
+		}
 
-	if len(streams) > 0 {
-		s.Unlock()
-		return streams, err
+		if len(streams) > 0 {
+			s.Unlock()
+			return streams, err
+		}
 	}
 
 	var stream StreamEntry
