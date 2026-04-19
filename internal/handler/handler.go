@@ -279,8 +279,8 @@ func (h *Handler) handleXReadBlock(cmd parser.Command) string {
 			defer wg.Done()
 			entries, err := h.store.RangeStreamBlock(
 				ctx,
-				args.Streams[i].Key,
-				args.Streams[i].Start,
+				stream.Key,
+				stream.Start,
 				args.Timeout,
 			)
 
@@ -288,7 +288,11 @@ func (h *Handler) handleXReadBlock(cmd parser.Command) string {
 
 			if err != nil {
 				msg.err = err
-				ch <- msg
+				select {
+				case ch <- msg:
+				case <-ctx.Done():
+				}
+				return
 			}
 
 			msg.reply = resp.ReadStreamsReply{Key: stream.Key}

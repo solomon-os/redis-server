@@ -455,7 +455,7 @@ func (s *store) createListListener(k string) chan string {
 }
 
 func (s *store) removeListListener(k string, currListener chan string) {
-	listeners := make([]chan string, 0, len(s.listListeners[k])-1)
+	listeners := make([]chan string, 0, max(len(s.listListeners[k])-1, 0))
 	for _, listener := range s.listListeners[k] {
 		if listener != currListener {
 			listeners = append(listeners, listener)
@@ -483,7 +483,7 @@ func (s *store) createStreamListenerUnlocked(k string) chan StreamEntry {
 }
 
 func (s *store) removeStreamListener(k string, currListener chan StreamEntry) {
-	listeners := make([]chan StreamEntry, 0, len(s.streamListeners[k])-1)
+	listeners := make([]chan StreamEntry, 0, max(len(s.streamListeners[k])-1, 0))
 	for _, listener := range s.streamListeners[k] {
 		if listener != currListener {
 			listeners = append(listeners, listener)
