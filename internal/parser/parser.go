@@ -38,13 +38,17 @@ type XRangeArgs struct {
 
 type XReadArgs struct {
 	Command string
-	Timeout int
-	Streams []streamArgs
+	Args    []string
 }
 
-type streamArgs struct {
+type XReadStreamArgs struct {
 	Key   string
 	Start string
+}
+
+type XReadBlockArgs struct {
+	Timeout int
+	Streams []XReadStreamArgs
 }
 
 type LenArgs struct {
@@ -184,47 +188,51 @@ func ParseXRangeArgs(cmd Command) (XRangeArgs, error) {
 	return args, nil
 }
 
-func ParseXReadArgs(cmd Command) (XReadArgs, error) {
-	args := XReadArgs{}
-
+func ParseXReadArgs(cmd Command) (Command, error) {
 	if len(cmd.Args) < 3 {
-		return args, errors.New("wrong command arguments for xread")
+		return Command{}, errors.New("wrong command arguments for xred")
+	}
+	return Command{Name: strings.ToUpper(cmd.Args[0]), Args: cmd.Args[1:]}, nil
+}
+
+func ParseXReadStreamArgs(cmd Command) ([]XReadStreamArgs, error) {
+	if len(cmd.Args) < 2 {
+		return nil, errors.New("wrong command arguments for xread")
+	}
+	n := len(cmd.Args)
+
+	if n%2 != 0 {
+		return nil, errors.New("wrong command arguments for xread")
 	}
 
-	switch strings.ToUpper(cmd.Args[0]) {
-	case "STREAMS":
-		args.Command = "STREAMS"
-		arr := cmd.Args[1:]
-		n := len(arr)
+	args := make([]XReadStreamArgs, 0, n/2)
 
-		if n%2 != 0 {
-			return args, errors.New("wrong command arguments for xread")
-		}
-
-		args.Streams = make([]streamArgs, 0, n/2)
-
-		for i, j := 0, n/2; j < n; i, j = i+1, j+1 {
-			args.Streams = append(args.Streams, streamArgs{Key: arr[i], Start: arr[j]})
-		}
-
-		return args, nil
-
-	case "BLOCK":
-		args.Command = "BLOCK"
-		timeout, err := strconv.Atoi(cmd.Args[1])
-		if err != nil {
-			return args, errors.New("invalid timeout argument")
-		}
-		args.Timeout = timeout
-
-		recursedArg, err := ParseXReadArgs(Command{Name: cmd.Name, Args: cmd.Args[2:]})
-		if err != nil {
-			return args, err
-		}
-		args.Streams = recursedArg.Streams
+	for i, j := 0, n/2; j < n; i, j = i+1, j+1 {
+		args = append(args, XReadStreamArgs{Key: cmd.Args[i], Start: cmd.Args[j]})
 	}
 
-	return args, errors.New("invalid xread command")
+	return args, nil
+}
+
+func ParseXReadBlockArgs(cmd Command) (XReadBlockArgs, error) {
+	args := XReadBlockArgs{}
+
+	if len(cmd.Args) < 4 {
+		return args, errors.New("not enough arguments for xread block")
+	}
+
+	timeout, err := strconv.Atoi(cmd.Args[0])
+	if err != nil {
+		return args, errors.New("invalid timeout argument")
+	}
+	args.Timeout = timeout
+
+	args.Streams, err = ParseXReadStreamArgs(Command{Args: cmd.Args[2:]})
+	if err != nil {
+		return args, err
+	}
+
+	return args, nil
 }
 
 func ParseLenArgs(cmd Command) LenArgs {

@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"errors"
 	"math"
 	"slices"
@@ -22,7 +23,7 @@ type Store interface {
 	KeyType(k string) string
 	SetStream(k, id string, fields map[string]string) (string, error)
 	RangeStream(k string, start, end string) ([]StreamEntry, error)
-	RangeStreamBlock(k, start string, timeout float64) ([]StreamEntry, error)
+	RangeStreamBlock(ctx context.Context, k, start string, timeout int) ([]StreamEntry, error)
 }
 
 type store struct {
@@ -257,44 +258,54 @@ func (s *store) RangeStream(k string, start, end string) ([]StreamEntry, error,
 	return s.rangeStreamUnlocked(k, start, end)
 }
 
-func (s *store) RangeStreamBlock(k, start string, timeout float64) ([]StreamEntry, error) {
+func (s *store) RangeStreamBlock(
+	ctx context.Context,
+	k, start string,
+	timeout int,
+) ([]StreamEntry, error) {
 	s.Lock()
 
-	if _, exist := s.streams[k]; exist && len(s.streams[k]) > 0 {
-		streams, err := s.rangeStreamUnlocked(k, start, "*")
-
-		if len(streams) > 0 {
-			s.Unlock()
-			return streams, err
-		}
+	streams, err := s.rangeStreamUnlocked(k, start, "*")
+	if err != nil {
+		return nil, err
 	}
 
-	var streams StreamEntry
+	if len(streams) > 0 {
+		s.Unlock()
+		return streams, err
+	}
+
+	var stream StreamEntry
 	var got bool
 
 	listener := s.createStreamListenerUnlocked(k)
 
 	s.Unlock()
 
-	select {
-	case streams = <-listener:
+	if timeout == 0 {
+		stream = <-listener
 		got = true
-	case <-time.After(time.Duration(timeout * float64(time.Millisecond))):
-		s.Lock()
+	} else {
 		select {
-		case streams = <-listener:
+		case stream = <-listener:
 			got = true
-		default:
+		case <-time.After(time.Duration(timeout) * time.Millisecond):
+			s.Lock()
+			select {
+			case stream = <-listener:
+				got = true
+			default:
+			}
+			s.removeStreamListener(k, listener)
+			s.Unlock()
 		}
-		s.removeStreamListener(k, listener)
-		s.Unlock()
 	}
 
 	if !got {
 		return nil, nil
 	}
 
-	return []StreamEntry{streams}, nil
+	return []StreamEntry{stream}, nil
 }
 
 func (s *store) LLen(k string) int {
