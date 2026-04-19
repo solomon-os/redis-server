@@ -3,7 +3,6 @@ package store
 import (
 	"context"
 	"errors"
-	"log"
 	"math"
 	"slices"
 	"strconv"
@@ -141,7 +140,7 @@ func (s *store) RPush(k string, v []string) int {
 
 	s.kvList[k] = append(s.kvList[k], v[popped:]...)
 
-	return len(s.kvList[k])
+	return len(s.kvList[k]) + popped
 }
 
 // LPush appends elemens at the left (beginning) end of the list
@@ -169,7 +168,7 @@ func (s *store) LPush(k string, v []string) int {
 
 	s.kvList[k] = append(v[popped:], s.kvList[k]...)
 
-	return len(s.kvList[k])
+	return len(s.kvList[k]) + popped
 }
 
 func (s *store) LRange(k string, start, end int) []string {
@@ -362,8 +361,6 @@ func (s *store) BLPop(k string, timeout float64) []string {
 
 	listener := s.createListListener(k)
 	s.Unlock()
-
-	log.Println(timeout)
 
 	var item string
 	var got bool
