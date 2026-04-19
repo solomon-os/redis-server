@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"errors"
+	"log"
 	"math"
 	"slices"
 	"strconv"
@@ -361,6 +362,8 @@ func (s *store) BLPop(k string, timeout float64) []string {
 
 	listener := s.createListListener(k)
 	s.Unlock()
+
+	log.Println(timeout)
 
 	var item string
 	var got bool
