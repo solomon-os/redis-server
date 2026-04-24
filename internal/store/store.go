@@ -3,7 +3,6 @@ package store
 import (
 	"context"
 	"errors"
-	"log"
 	"math"
 	"slices"
 	"strconv"
@@ -410,25 +409,24 @@ func (s *Store) KeyType(k string) string {
 	return ""
 }
 
-func (s *Store) IncrementKv(k string) int {
+func (s *Store) IncrementKv(k string) (int, error) {
 	s.Lock()
 	defer s.Unlock()
 
 	if val, exist := s.kv[k]; exist {
 		integer, err := strconv.Atoi(val.value)
 		if err != nil {
-			return 0
+			return 0, errors.New("value is not an integer or out of range")
 		}
 		integer++
 		val.value = strconv.Itoa(integer)
 		s.kv[k] = val
-		log.Println(integer)
-		return integer
+		return integer, nil
 	}
 
 	s.setUnlocked(k, "1", -1)
 
-	return 1
+	return 1, nil
 }
 
 func (s *Store) SetStream(k, req string, fields map[string]string) (string, error) {

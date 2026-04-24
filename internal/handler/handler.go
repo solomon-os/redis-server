@@ -402,7 +402,10 @@ func (h *Handler) handleIncr(cmd parser.Command) string {
 		return resp.Error(err.Error())
 	}
 
-	res := h.store.IncrementKv(args.Key)
+	res, err := h.store.IncrementKv(args.Key)
+	if err != nil {
+		return resp.Error(err.Error())
+	}
 
 	return resp.Integer(res)
 }
