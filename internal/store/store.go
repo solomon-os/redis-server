@@ -222,30 +222,25 @@ func (s *store) rangeStreamUnlocked(k string, start, end string) ([]StreamEntry,
 	}
 
 	for i := range s.streams[k] {
-		stream := s.streams[k][i]
-		entry := StreamEntry{
-			ID:     stream.ID,
-			Fields: stream.Fields,
+		entry := s.streams[k][i]
+
+		// Lower bound: exclusive when end == "*" (XREAD), inclusive otherwise (XRANGE).
+		var meetsLower bool
+		if end == "*" {
+			meetsLower = entry.ID.ms > startId ||
+				(entry.ID.ms == startId && entry.ID.seq > startSeq)
+		} else {
+			meetsLower = entry.ID.ms > startId ||
+				(entry.ID.ms == startId && entry.ID.seq >= startSeq)
 		}
 
-		if stream.ID.ms > startId && stream.ID.ms < endId {
-			entries = append(entries, entry)
-			continue
-		}
+		// Upper bound: always inclusive ("+" / "*" already raised to MaxInt above).
+		meetsUpper := entry.ID.ms < endId ||
+			(entry.ID.ms == endId && entry.ID.seq <= endSeq)
 
-		if stream.ID.ms == startId {
-			if end != "*" && stream.ID.seq >= startSeq && stream.ID.seq <= endSeq {
-				entries = append(entries, entry)
-				continue
-			} else if stream.ID.seq > startSeq && stream.ID.seq <= endSeq {
-				entries = append(entries, entry)
-			}
-		}
-
-		if stream.ID.ms == endId && stream.ID.seq >= startSeq && stream.ID.seq <= endSeq {
+		if meetsLower && meetsUpper {
 			entries = append(entries, entry)
 		}
-
 	}
 	return entries, nil
 }
@@ -268,12 +263,13 @@ func (s *store) RangeStreamBlock(
 	if start != "$" {
 		streams, err := s.rangeStreamUnlocked(k, start, "*")
 		if err != nil {
+			s.Unlock()
 			return nil, err
 		}
 
 		if len(streams) > 0 {
 			s.Unlock()
-			return streams, err
+			return streams, nil
 		}
 	}
 
@@ -284,22 +280,32 @@ func (s *store) RangeStreamBlock(
 
 	s.Unlock()
 
+	cleanup := func() {
+		s.Lock()
+		select {
+		case stream = <-listener:
+			got = true
+		default:
+		}
+		s.removeStreamListener(k, listener)
+		s.Unlock()
+	}
+
 	if timeout == 0 {
-		stream = <-listener
-		got = true
+		select {
+		case stream = <-listener:
+			got = true
+		case <-ctx.Done():
+			cleanup()
+		}
 	} else {
 		select {
 		case stream = <-listener:
 			got = true
+		case <-ctx.Done():
+			cleanup()
 		case <-time.After(time.Duration(timeout) * time.Millisecond):
-			s.Lock()
-			select {
-			case stream = <-listener:
-				got = true
-			default:
-			}
-			s.removeStreamListener(k, listener)
-			s.Unlock()
+			cleanup()
 		}
 	}
 
@@ -396,6 +402,9 @@ func (s *store) BLPop(k string, timeout float64) []string {
 }
 
 func (s *store) KeyType(k string) string {
+	s.RLock()
+	defer s.RUnlock()
+
 	if _, exist := s.kv[k]; exist {
 		return "string"
 	}
@@ -517,14 +526,14 @@ func parseStreamID(s string) (ms, seq int, msAuto, seqAuto bool, err error) {
 
 	parts := strings.SplitN(s, "-", 2)
 
-	ms, err = strconv.Atoi(parts[0])
-	if err != nil {
-		err = errStreamIDType
+	if len(parts) != 2 {
+		err = errStreamIDFormat
 		return
 	}
 
-	if len(parts) != 2 {
-		err = errStreamIDFormat
+	ms, err = strconv.Atoi(parts[0])
+	if err != nil {
+		err = errStreamIDType
 		return
 	}
 
