@@ -19,6 +19,10 @@ type SetArgs struct {
 	TTL   int64 // stores expire in milliseconds
 }
 
+type IncrArgs struct {
+	Key string
+}
+
 type PushArgs struct {
 	Key   string
 	Value []string
@@ -161,6 +165,16 @@ func ParseSetArgs(cmd Command) (SetArgs, error) {
 		return setArgs, nil
 	}
 	return setArgs, nil
+}
+
+func ParseIncrArgs(cmd Command) (IncrArgs, error) {
+	if len(cmd.Args) < 1 {
+		return IncrArgs{}, errors.New("wrong number of arguments for incr")
+	}
+
+	return IncrArgs{
+		Key: cmd.Args[0j],
+	}, nil
 }
 
 func ParsePushArgs(cmd Command) (PushArgs, error) {

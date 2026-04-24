@@ -397,5 +397,12 @@ func (h *Handler) handleXReadBlock(cmd parser.Command) string {
 }
 
 func (h *Handler) handleIncr(cmd parser.Command) string {
-	return resp.Error("INCR not implemented")
+	args, err := parser.ParseIncrArgs(cmd)
+	if err != nil {
+		return resp.Error(err.Error())
+	}
+
+	res := h.store.IncrementKv(args.Key)
+
+	return resp.Integer(res)
 }
