@@ -173,7 +173,7 @@ func ParseIncrArgs(cmd Command) (IncrArgs, error) {
 	}
 
 	return IncrArgs{
-		Key: cmd.Args[0j],
+		Key: cmd.Args[0],
 	}, nil
 }
 
