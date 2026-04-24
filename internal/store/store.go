@@ -77,7 +77,7 @@ func (s *Store) Get(k string) (string, bool) {
 	return r.value, ok
 }
 
-func (s *Store) setUnlocked(k, v string, tll int64) {
+func (s *Store) setUnlocked(k, v string, ttl int64) {
 	var timer *time.Timer
 
 	// check if key already exists and stop previous timer
@@ -103,7 +103,7 @@ func (s *Store) Set(k, v string, ttl int64) {
 	s.Lock()
 	defer s.Unlock()
 
-	s.setUnlocked()
+	s.setUnlocked(k, v, ttl)
 }
 
 // RPush appends element at the right end of the array
