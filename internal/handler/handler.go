@@ -12,7 +12,7 @@ import (
 )
 
 type Handler struct {
-	store store.Store
+	store *store.Store
 }
 
 type xReadChanStruct struct {
@@ -20,7 +20,7 @@ type xReadChanStruct struct {
 	err   error
 }
 
-func New(store store.Store) *Handler {
+func New(store *store.Store) *Handler {
 	return &Handler{store}
 }
 
@@ -78,6 +78,9 @@ func (h *Handler) handleCommand(cmd parser.Command) string {
 	case "XREAD":
 		return h.handleXRead(cmd)
 
+	case "INCR":
+		return h.handleIncr(cmd)
+
 	default:
 		return resp.Error("unknown command")
 	}
@@ -95,6 +98,9 @@ func (h *Handler) handleEcho(cmd parser.Command) string {
 }
 
 func (h *Handler) handleGet(cmd parser.Command) string {
+	if len(cmd.Args) < 1 {
+		return resp.Error("wrong number of arguments for 'get' command")
+	}
 	val, exist := h.store.Get(cmd.Args[0])
 	if !exist {
 		return resp.NullBulkString()
@@ -103,37 +109,55 @@ func (h *Handler) handleGet(cmd parser.Command) string {
 }
 
 func (h *Handler) handleSet(cmd parser.Command) string {
-	args := parser.ParseSetArgs(cmd)
-	h.store.Set(cmd.Args[0], cmd.Args[1], args.TTL)
+	args, err := parser.ParseSetArgs(cmd)
+	if err != nil {
+		return resp.Error(err.Error())
+	}
+	h.store.Set(args.Key, args.Value, args.TTL)
 	return resp.SimpleString("OK")
 }
 
 func (h *Handler) handleRPush(cmd parser.Command) string {
-	args := parser.ParsePushArgs(cmd)
+	args, err := parser.ParsePushArgs(cmd)
+	if err != nil {
+		return resp.Error(err.Error())
+	}
 	size := h.store.RPush(args.Key, args.Value)
 	return resp.Integer(size)
 }
 
 func (h *Handler) handleLRange(cmd parser.Command) string {
-	args := parser.ParseRangeArgs(cmd)
+	args, err := parser.ParseRangeArgs(cmd)
+	if err != nil {
+		return resp.Error(err.Error())
+	}
 	list := h.store.LRange(args.Key, args.Start, args.End)
 	return resp.BulkStringArray(list)
 }
 
 func (h *Handler) handleLPush(cmd parser.Command) string {
-	args := parser.ParsePushArgs(cmd)
+	args, err := parser.ParsePushArgs(cmd)
+	if err != nil {
+		return resp.Error(err.Error())
+	}
 	size := h.store.LPush(args.Key, args.Value)
 	return resp.Integer(size)
 }
 
 func (h *Handler) handleLLen(cmd parser.Command) string {
-	args := parser.ParseLenArgs(cmd)
+	args, err := parser.ParseLenArgs(cmd)
+	if err != nil {
+		return resp.Error(err.Error())
+	}
 	len := h.store.LLen(args.Key)
 	return resp.Integer(len)
 }
 
 func (h *Handler) handleLPop(cmd parser.Command) string {
-	args := parser.ParsePopArgs(cmd)
+	args, err := parser.ParsePopArgs(cmd)
+	if err != nil {
+		return resp.Error(err.Error())
+	}
 	if !args.Arguments {
 		popedItem := h.store.LPop(args.Key, 1)
 		if len(popedItem) == 0 {
@@ -152,7 +176,10 @@ func (h *Handler) handleLPop(cmd parser.Command) string {
 }
 
 func (h *Handler) handleBLPop(cmd parser.Command) string {
-	args := parser.ParseBPopArgs(cmd)
+	args, err := parser.ParseBPopArgs(cmd)
+	if err != nil {
+		return resp.Error(err.Error())
+	}
 	if args.Timeout < 0 {
 		return resp.Error("value not an interger")
 	}
@@ -165,7 +192,10 @@ func (h *Handler) handleBLPop(cmd parser.Command) string {
 }
 
 func (h *Handler) handleType(cmd parser.Command) string {
-	args := parser.ParseTypeArgs(cmd)
+	args, err := parser.ParseTypeArgs(cmd)
+	if err != nil {
+		return resp.Error(err.Error())
+	}
 	keyType := h.store.KeyType(args.Key)
 
 	if keyType == "" {
@@ -364,4 +394,8 @@ func (h *Handler) handleXReadBlock(cmd parser.Command) string {
 	}
 
 	return resp.XReadReply(out)
+}
+
+func (h *Handler) handleIncr(cmd parser.Command) string {
+	return resp.Error("INCR not implemented")
 }

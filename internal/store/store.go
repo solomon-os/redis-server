@@ -11,22 +11,7 @@ import (
 	"time"
 )
 
-type Store interface {
-	Get(k string) (string, bool)
-	Set(k, v string, ttl int64)
-	LPush(k string, v []string) int
-	RPush(k string, v []string) int
-	LRange(k string, start, end int) []string
-	LLen(k string) int
-	LPop(k string, length int) []string
-	BLPop(k string, timeout float64) []string
-	KeyType(k string) string
-	SetStream(k, id string, fields map[string]string) (string, error)
-	RangeStream(k string, start, end string) ([]StreamEntry, error)
-	RangeStreamBlock(ctx context.Context, k, start string, timeout int) ([]StreamEntry, error)
-}
-
-type store struct {
+type Store struct {
 	kv              map[string]record
 	kvList          map[string][]string
 	streams         map[string][]StreamEntry
@@ -73,8 +58,8 @@ var (
 	errStreamIDType   = errors.New("invalid id type")
 )
 
-func New() Store {
-	return &store{
+func New() *Store {
+	return &Store{
 		kv:              make(map[string]record),
 		kvList:          make(map[string][]string),
 		streams:         make(map[string][]StreamEntry),
@@ -83,7 +68,7 @@ func New() Store {
 	}
 }
 
-func (s *store) Get(k string) (string, bool) {
+func (s *Store) Get(k string) (string, bool) {
 	s.RLock()
 	defer s.RUnlock()
 
@@ -91,7 +76,7 @@ func (s *store) Get(k string) (string, bool) {
 	return r.value, ok
 }
 
-func (s *store) Set(k, v string, ttl int64) {
+func (s *Store) Set(k, v string, ttl int64) {
 	s.Lock()
 	defer s.Unlock()
 
@@ -117,7 +102,7 @@ func (s *store) Set(k, v string, ttl int64) {
 }
 
 // RPush appends element at the right end of the array
-func (s *store) RPush(k string, v []string) int {
+func (s *Store) RPush(k string, v []string) int {
 	s.Lock()
 	defer s.Unlock()
 
@@ -144,7 +129,7 @@ func (s *store) RPush(k string, v []string) int {
 }
 
 // LPush appends elemens at the left (beginning) end of the list
-func (s *store) LPush(k string, v []string) int {
+func (s *Store) LPush(k string, v []string) int {
 	slices.Reverse(v)
 	s.Lock()
 	defer s.Unlock()
@@ -171,7 +156,7 @@ func (s *store) LPush(k string, v []string) int {
 	return len(s.kvList[k]) + popped
 }
 
-func (s *store) LRange(k string, start, end int) []string {
+func (s *Store) LRange(k string, start, end int) []string {
 	s.RLock()
 	defer s.RUnlock()
 
@@ -199,7 +184,7 @@ func (s *store) LRange(k string, start, end int) []string {
 	return list[start : end+1]
 }
 
-func (s *store) rangeStreamUnlocked(k string, start, end string) ([]StreamEntry, error) {
+func (s *Store) rangeStreamUnlocked(k string, start, end string) ([]StreamEntry, error) {
 	startId, startSeq, _, _, err := parseStreamID(start)
 	if start != "0" && start != "-" && startId == 0 && err != nil {
 		return nil, err
@@ -245,7 +230,7 @@ func (s *store) rangeStreamUnlocked(k string, start, end string) ([]StreamEntry,
 	return entries, nil
 }
 
-func (s *store) RangeStream(k string, start, end string) ([]StreamEntry, error,
+func (s *Store) RangeStream(k string, start, end string) ([]StreamEntry, error,
 ) {
 	s.RLock()
 	defer s.RUnlock()
@@ -253,7 +238,7 @@ func (s *store) RangeStream(k string, start, end string) ([]StreamEntry, error,
 	return s.rangeStreamUnlocked(k, start, end)
 }
 
-func (s *store) RangeStreamBlock(
+func (s *Store) RangeStreamBlock(
 	ctx context.Context,
 	k, start string,
 	timeout int,
@@ -316,7 +301,7 @@ func (s *store) RangeStreamBlock(
 	return []StreamEntry{stream}, nil
 }
 
-func (s *store) LLen(k string) int {
+func (s *Store) LLen(k string) int {
 	s.RLock()
 	defer s.RUnlock()
 
@@ -328,7 +313,7 @@ func (s *store) LLen(k string) int {
 	return len(list)
 }
 
-func (s *store) lpopLocked(k string, length int) ([]string, bool) {
+func (s *Store) lpopLocked(k string, length int) ([]string, bool) {
 	list, ok := s.kvList[k]
 	if !ok || len(list) == 0 {
 		return nil, false
@@ -349,7 +334,7 @@ func (s *store) lpopLocked(k string, length int) ([]string, bool) {
 }
 
 // LPop removes an element from the left (beginning) of the list
-func (s *store) LPop(k string, length int) []string {
+func (s *Store) LPop(k string, length int) []string {
 	s.Lock()
 	defer s.Unlock()
 
@@ -358,7 +343,7 @@ func (s *store) LPop(k string, length int) []string {
 	return items
 }
 
-func (s *store) BLPop(k string, timeout float64) []string {
+func (s *Store) BLPop(k string, timeout float64) []string {
 	s.Lock()
 
 	items, ok := s.lpopLocked(k, 1)
@@ -401,7 +386,7 @@ func (s *store) BLPop(k string, timeout float64) []string {
 	return []string{k, item}
 }
 
-func (s *store) KeyType(k string) string {
+func (s *Store) KeyType(k string) string {
 	s.RLock()
 	defer s.RUnlock()
 
@@ -420,7 +405,23 @@ func (s *store) KeyType(k string) string {
 	return ""
 }
 
-func (s *store) SetStream(k, req string, fields map[string]string) (string, error) {
+func (s *Store) IncrementKv(k string) int {
+	s.Lock()
+	defer s.Unlock()
+	if val, exist := s.kv[k]; exist {
+		integer, err := strconv.Atoi(val.value)
+		if err != nil {
+			integer++
+			val.value = strconv.Itoa(integer)
+			s.kv[k] = val
+			return integer
+		}
+	}
+
+	return 0
+}
+
+func (s *Store) SetStream(k, req string, fields map[string]string) (string, error) {
 	s.Lock()
 	defer s.Unlock()
 
@@ -447,13 +448,13 @@ func (s *store) SetStream(k, req string, fields map[string]string) (string, erro
 	return id.String(), nil
 }
 
-func (s *store) ensureList(k string) {
+func (s *Store) ensureList(k string) {
 	if _, exist := s.kvList[k]; !exist {
 		s.kvList[k] = []string{}
 	}
 }
 
-func (s *store) createListListener(k string) chan string {
+func (s *Store) createListListener(k string) chan string {
 	listener := make(chan string, 1)
 	if _, exist := s.listListeners[k]; exist {
 		s.listListeners[k] = append(s.listListeners[k], listener)
@@ -465,7 +466,7 @@ func (s *store) createListListener(k string) chan string {
 	return listener
 }
 
-func (s *store) removeListListener(k string, currListener chan string) {
+func (s *Store) removeListListener(k string, currListener chan string) {
 	listeners := make([]chan string, 0, max(len(s.listListeners[k])-1, 0))
 	for _, listener := range s.listListeners[k] {
 		if listener != currListener {
@@ -481,7 +482,7 @@ func (s *store) removeListListener(k string, currListener chan string) {
 	close(currListener)
 }
 
-func (s *store) createStreamListenerUnlocked(k string) chan StreamEntry {
+func (s *Store) createStreamListenerUnlocked(k string) chan StreamEntry {
 	listener := make(chan StreamEntry, 1)
 	if _, exist := s.streamListeners[k]; exist {
 		s.streamListeners[k] = append(s.streamListeners[k], listener)
@@ -493,7 +494,7 @@ func (s *store) createStreamListenerUnlocked(k string) chan StreamEntry {
 	return listener
 }
 
-func (s *store) removeStreamListener(k string, currListener chan StreamEntry) {
+func (s *Store) removeStreamListener(k string, currListener chan StreamEntry) {
 	listeners := make([]chan StreamEntry, 0, max(len(s.streamListeners[k])-1, 0))
 	for _, listener := range s.streamListeners[k] {
 		if listener != currListener {
@@ -509,7 +510,7 @@ func (s *store) removeStreamListener(k string, currListener chan StreamEntry) {
 	close(currListener)
 }
 
-func (s *store) removeKey(key string) func() {
+func (s *Store) removeKey(key string) func() {
 	return func() {
 		s.Lock()
 		defer s.Unlock()
