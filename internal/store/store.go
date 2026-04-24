@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"errors"
+	"log"
 	"math"
 	"slices"
 	"strconv"
@@ -411,11 +412,13 @@ func (s *Store) IncrementKv(k string) int {
 	if val, exist := s.kv[k]; exist {
 		integer, err := strconv.Atoi(val.value)
 		if err != nil {
-			integer++
-			val.value = strconv.Itoa(integer)
-			s.kv[k] = val
-			return integer
+			return 0
 		}
+		integer++
+		val.value = strconv.Itoa(integer)
+		s.kv[k] = val
+		log.Println(integer)
+		return integer
 	}
 
 	return 0
