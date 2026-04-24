@@ -74,9 +74,11 @@ type StreamArgs struct {
 }
 
 func Parse(input string) (Command, error) {
-	firstChar := input[0]
+	if len(input) == 0 {
+		return Command{}, errors.New("empty input")
+	}
 
-	switch firstChar {
+	switch input[0] {
 	case '*':
 		return parseArray(input)
 	}
@@ -114,7 +116,11 @@ func parseArray(input string) (Command, error) {
 	}, nil
 }
 
-func ParseSetArgs(cmd Command) SetArgs {
+func ParseSetArgs(cmd Command) (SetArgs, error) {
+	if len(cmd.Args) < 2 {
+		return SetArgs{}, errors.New("wrong number of arguments for set")
+	}
+
 	setArgs := SetArgs{
 		Key:   cmd.Args[0],
 		Value: cmd.Args[1],
@@ -122,7 +128,7 @@ func ParseSetArgs(cmd Command) SetArgs {
 	}
 
 	if len(cmd.Args) < 4 {
-		return setArgs
+		return setArgs, nil
 	}
 
 	// The PX option is used to set a key's expiry time in milliseconds. After the key expires, it's no longer accessible.
@@ -131,45 +137,51 @@ func ParseSetArgs(cmd Command) SetArgs {
 		ttl, err := strconv.ParseInt(cmd.Args[3], 10, 64)
 		if err != nil {
 			slog.Error("convertion px value int failed: ", "error", err)
-			return setArgs
+			return setArgs, nil
 		}
 
 		if ttl > 0 {
 			setArgs.TTL = ttl
 		}
 
-		return setArgs
+		return setArgs, nil
 
 	// The EX option is used to set a key's expiry time in seconds. After the key expires, it's no longer accessible.
 	case "ex":
 		ttl, err := strconv.ParseInt(cmd.Args[3], 10, 64)
 		if err != nil {
 			slog.Error("convertion px value int failed: ", "error", err)
-			return setArgs
+			return setArgs, nil
 		}
 
 		if ttl > 0 {
 			setArgs.TTL = ttl * 1000
 		}
 
-		return setArgs
+		return setArgs, nil
 	}
-	return setArgs
+	return setArgs, nil
 }
 
-func ParsePushArgs(cmd Command) PushArgs {
+func ParsePushArgs(cmd Command) (PushArgs, error) {
+	if len(cmd.Args) < 2 {
+		return PushArgs{}, errors.New("wrong number of arguments for push")
+	}
 	return PushArgs{
 		Key:   cmd.Args[0],
 		Value: cmd.Args[1:],
-	}
+	}, nil
 }
 
-func ParseRangeArgs(cmd Command) RangeArgs {
+func ParseRangeArgs(cmd Command) (RangeArgs, error) {
+	if len(cmd.Args) < 3 {
+		return RangeArgs{}, errors.New("wrong number of arguments for range")
+	}
 	return RangeArgs{
 		Key:   cmd.Args[0],
 		Start: parseInt(cmd.Args[1]),
 		End:   parseInt(cmd.Args[2]),
-	}
+	}, nil
 }
 
 func ParseXRangeArgs(cmd Command) (XRangeArgs, error) {
@@ -235,13 +247,20 @@ func ParseXReadBlockArgs(cmd Command) (XReadBlockArgs, error) {
 	return args, nil
 }
 
-func ParseLenArgs(cmd Command) LenArgs {
+func ParseLenArgs(cmd Command) (LenArgs, error) {
+	if len(cmd.Args) < 1 {
+		return LenArgs{}, errors.New("wrong number of arguments for llen")
+	}
 	return LenArgs{
 		Key: cmd.Args[0],
-	}
+	}, nil
 }
 
-func ParsePopArgs(cmd Command) PopArgs {
+func ParsePopArgs(cmd Command) (PopArgs, error) {
+	if len(cmd.Args) < 1 {
+		return PopArgs{}, errors.New("wrong number of arguments for pop")
+	}
+
 	args := PopArgs{
 		Key:       cmd.Args[0],
 		Length:    0,
@@ -253,23 +272,33 @@ func ParsePopArgs(cmd Command) PopArgs {
 		args.Arguments = true
 	}
 
-	return args
+	return args, nil
 }
 
-func ParseBPopArgs(cmd Command) PopArgs {
+func ParseBPopArgs(cmd Command) (PopArgs, error) {
+	if len(cmd.Args) < 2 {
+		return PopArgs{}, errors.New("wrong number of arguments for blpop")
+	}
 	return PopArgs{
 		Key:     cmd.Args[0],
 		Timeout: parseFloat(cmd.Args[1]),
-	}
+	}, nil
 }
 
-func ParseTypeArgs(cmd Command) TypeArgs {
+func ParseTypeArgs(cmd Command) (TypeArgs, error) {
+	if len(cmd.Args) < 1 {
+		return TypeArgs{}, errors.New("wrong number of arguments for type")
+	}
 	return TypeArgs{
 		Key: cmd.Args[0],
-	}
+	}, nil
 }
 
 func ParseStreamArgs(cmd Command) (StreamArgs, error) {
+	if len(cmd.Args) < 4 {
+		return StreamArgs{}, errors.New("wrong number of arguments for xadd")
+	}
+
 	args := StreamArgs{
 		Key: cmd.Args[0],
 		ID:  cmd.Args[1],
