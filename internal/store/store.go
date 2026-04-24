@@ -77,10 +77,7 @@ func (s *Store) Get(k string) (string, bool) {
 	return r.value, ok
 }
 
-func (s *Store) Set(k, v string, ttl int64) {
-	s.Lock()
-	defer s.Unlock()
-
+func (s *Store) setUnlocked(k, v string, tll int64) {
 	var timer *time.Timer
 
 	// check if key already exists and stop previous timer
@@ -100,6 +97,13 @@ func (s *Store) Set(k, v string, ttl int64) {
 	}
 
 	s.kv[k] = r
+}
+
+func (s *Store) Set(k, v string, ttl int64) {
+	s.Lock()
+	defer s.Unlock()
+
+	s.setUnlocked()
 }
 
 // RPush appends element at the right end of the array
@@ -409,6 +413,7 @@ func (s *Store) KeyType(k string) string {
 func (s *Store) IncrementKv(k string) int {
 	s.Lock()
 	defer s.Unlock()
+
 	if val, exist := s.kv[k]; exist {
 		integer, err := strconv.Atoi(val.value)
 		if err != nil {
@@ -421,7 +426,9 @@ func (s *Store) IncrementKv(k string) int {
 		return integer
 	}
 
-	return 0
+	s.setUnlocked(k, "1", -1)
+
+	return 1
 }
 
 func (s *Store) SetStream(k, req string, fields map[string]string) (string, error) {
