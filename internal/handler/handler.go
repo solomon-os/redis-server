@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/codecrafters-io/redis-starter-go/internal/client"
 	"github.com/codecrafters-io/redis-starter-go/internal/parser"
 	"github.com/codecrafters-io/redis-starter-go/internal/resp"
 	"github.com/codecrafters-io/redis-starter-go/internal/store"
@@ -24,17 +25,17 @@ func New(store *store.Store) *Handler {
 	return &Handler{store}
 }
 
-func (h *Handler) Handle(raw string) (string, error) {
+func (h *Handler) Handle(conn *client.Client, raw string) (string, error) {
 	cmd, err := parser.Parse(raw)
 	if err != nil {
 		return "", fmt.Errorf("couldn't parse message: %v", err)
 	}
 
-	response := h.handleCommand(cmd)
+	response := h.handleCommand(conn, cmd)
 	return response, nil
 }
 
-func (h *Handler) handleCommand(cmd parser.Command) string {
+func (h *Handler) handleCommand(conn *client.Client, cmd parser.Command) string {
 	switch cmd.Name {
 	case "PING":
 		return h.handlePing(cmd)
@@ -80,6 +81,9 @@ func (h *Handler) handleCommand(cmd parser.Command) string {
 
 	case "INCR":
 		return h.handleIncr(cmd)
+
+	case "MULTI":
+		return h.handleMulti(conn, cmd)
 
 	default:
 		return resp.Error("unknown command")
@@ -408,4 +412,8 @@ func (h *Handler) handleIncr(cmd parser.Command) string {
 	}
 
 	return resp.Integer(res)
+}
+
+func (h *Handler) handleMulti(conn *client.Client, cmd parser.Command) string {
+	args, err := parser.ParseIncrArgs(cmd)
 }

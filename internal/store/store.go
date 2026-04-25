@@ -20,6 +20,15 @@ type Store struct {
 	sync.RWMutex
 }
 
+type Transaction struct {
+	kv              map[string]record
+	kvList          map[string][]string
+	streams         map[string][]StreamEntry
+	listListeners   map[string][]chan string
+	streamListeners map[string][]chan StreamEntry
+	sync.RWMutex
+}
+
 type record struct {
 	value string
 	timer *time.Timer

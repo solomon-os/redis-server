@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net"
 
+	"github.com/codecrafters-io/redis-starter-go/internal/client"
 	"github.com/codecrafters-io/redis-starter-go/internal/handler"
 	"github.com/codecrafters-io/redis-starter-go/internal/resp"
 	"github.com/codecrafters-io/redis-starter-go/internal/store"
@@ -53,6 +54,8 @@ func (s *Server) handleConnection(conn net.Conn) {
 			slog.Error("failed to close listener", "error", err)
 		}
 	}()
+
+	client := client.New(conn)
 	buf := make([]byte, 1024)
 
 	for {
@@ -64,7 +67,7 @@ func (s *Server) handleConnection(conn net.Conn) {
 			return
 		}
 
-		response, err := s.handler.Handle(string(buf[:n]))
+		response, err := s.handler.Handle(client, string(buf[:n]))
 		if err != nil {
 			slog.Error("", "error", err)
 			_, _ = io.WriteString(conn, resp.Error(err.Error()))
