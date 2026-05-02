@@ -58,6 +58,10 @@ func XRangeReply(s []StreamReply) string {
 func XReadReply(s []ReadStreamsReply) string {
 	var str strings.Builder
 
+	if len(s) == 0 {
+		return "*-1\r\n"
+	}
+
 	fmt.Fprintf(&str, "*%d\r\n", len(s))
 
 	for i := range s {

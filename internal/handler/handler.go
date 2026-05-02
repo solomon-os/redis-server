@@ -3,7 +3,6 @@ package handler
 import (
 	"context"
 	"fmt"
-	"sync"
 	"time"
 
 	"github.com/codecrafters-io/redis-starter-go/internal/parser"
@@ -251,7 +250,7 @@ func (h *Handler) handleXRead(cmd parser.Command) string {
 	case "STREAMS":
 		return h.handleXReadStreams(xreadCmd)
 	case "BLOCK":
-		return h.handleXReadBlock(xreadCmd)
+		return h.handleXReadBlock2(xreadCmd)
 	}
 
 	return resp.Error("xread command not supported")
@@ -263,138 +262,214 @@ func (h *Handler) handleXReadStreams(cmd parser.Command) string {
 		return resp.Error(err.Error())
 	}
 
-	out := make([]resp.ReadStreamsReply, len(args))
+	outs := make([]resp.ReadStreamsReply, 0, len(args))
+
+	storeParams := make([]store.RangeMultiArgs, 0, len(args))
 
 	for i := range args {
-		// * tells rangstream to ignore the start id
-		entries, err := h.store.RangeStream(args[i].Key, args[i].Start, "*")
-		if err != nil {
-			return resp.Error(err.Error())
+		storeParams = append(
+			storeParams,
+			store.RangeMultiArgs{Key: args[i].Key, Start: args[i].Start},
+		)
+	}
+
+	streams, err := h.store.RangeStreamMulti(storeParams)
+	if err != nil {
+		return resp.Error(err.Error())
+	}
+
+	if len(streams) == 0 {
+		return resp.XReadReply(outs)
+	}
+
+	for i, s := range storeParams {
+		if len(streams[i]) == 0 {
+			continue
 		}
 
-		out[i] = resp.ReadStreamsReply{
-			Key:           args[i].Key,
-			StreamReplies: make([]resp.StreamReply, 0, len(entries)),
+		out := resp.ReadStreamsReply{
+			Key:           s.Key,
+			StreamReplies: make([]resp.StreamReply, 0, len(streams[i])),
 		}
 
-		for j := range entries {
-			out[i].StreamReplies = append(out[i].StreamReplies, resp.StreamReply{
-				ID:     entries[j].ID.String(),
-				Fields: entries[j].FlatFields(),
+		for _, k := range streams[i] {
+			out.StreamReplies = append(out.StreamReplies, resp.StreamReply{
+				ID:     k.ID.String(),
+				Fields: k.FlatFields(),
 			})
 		}
 
+		outs = append(outs, out)
 	}
 
-	return resp.XReadReply(out)
+	return resp.XReadReply(outs)
 }
 
-func (h *Handler) handleXReadBlock(cmd parser.Command) string {
-	var wg sync.WaitGroup
-
+func (h *Handler) handleXReadBlock2(cmd parser.Command) string {
 	args, err := parser.ParseXReadBlockArgs(cmd)
 	if err != nil {
 		return resp.Error(err.Error())
 	}
 
-	out := []resp.ReadStreamsReply{}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	ch := make(chan xReadChanStruct)
+	if args.Timeout > 0 {
+		ctx, cancel = context.WithTimeout(
+			ctx,
+			time.Duration(args.Timeout)*time.Millisecond,
+		)
+		defer cancel()
+	}
+
+	channel := h.store.StreamSub()
+	defer h.store.StreamUnSub(channel)
+
+	storeParams := make([]store.RangeMultiArgs, 0, len(args.Streams))
 
 	for i := range args.Streams {
-		wg.Add(1)
-		go func(ctx context.Context, stream parser.XReadStreamArgs) {
-			defer wg.Done()
-			entries, err := h.store.RangeStreamBlock(
-				ctx,
-				stream.Key,
-				stream.Start,
-				args.Timeout,
-			)
-
-			var msg xReadChanStruct
-
-			if err != nil {
-				msg.err = err
-				select {
-				case ch <- msg:
-				case <-ctx.Done():
-				}
-				return
-			}
-
-			msg.reply = resp.ReadStreamsReply{Key: stream.Key}
-
-			for j := range entries {
-				msg.reply.StreamReplies = append(msg.reply.StreamReplies, resp.StreamReply{
-					ID:     entries[j].ID.String(),
-					Fields: entries[j].FlatFields(),
-				})
-			}
-
-			if len(msg.reply.StreamReplies) > 0 {
-				select {
-				case ch <- msg:
-				case <-ctx.Done():
-				}
-			}
-		}(ctx, args.Streams[i])
+		storeParams = append(
+			storeParams,
+			store.RangeMultiArgs{Key: args.Streams[i].Key, Start: args.Streams[i].Start},
+		)
 	}
 
-	go func() {
-		wg.Wait()
-		close(ch)
-	}()
-
-	if args.Timeout == 0 {
-		// first one to read
-		msg, ok := <-ch
-		if ok {
-			if msg.err != nil {
-				return resp.Error(msg.err.Error())
-			}
-			out = append(out, msg.reply)
-		}
-
-		canceled := false
-		// check again if another is sent in before exiting
-		for !canceled {
-			select {
-
-			case msg, ok := <-ch:
-				if ok {
-					if msg.err != nil {
-						return resp.Error(msg.err.Error())
-					}
-					out = append(out, msg.reply)
-				}
-			case <-time.After(time.Duration(5 * time.Millisecond)):
-				cancel()
-				canceled = true
-			}
-		}
-
-	} else {
-		time.AfterFunc(time.Duration(args.Timeout)*time.Millisecond, func() {
-			cancel()
-		})
-
-		for msg := range ch {
-			if msg.err != nil {
-				return resp.Error(msg.err.Error())
-			}
-			out = append(out, msg.reply)
-		}
+	streams, err := h.store.RangeStreamMulti(storeParams)
+	if err != nil {
+		return resp.Error(err.Error())
 	}
 
-	if len(out) == 0 {
-		return resp.NullOrBulkStringArray(nil)
+	outs := h.constructXReadReply(storeParams, streams)
+
+	if len(outs) > 0 {
+		return resp.XReadReply(outs)
 	}
 
-	return resp.XReadReply(out)
+	for {
+		select {
+		case <-channel:
+			streams, _ = h.store.RangeStreamMulti(storeParams)
+			outs = h.constructXReadReply(storeParams, streams)
+			if len(outs) > 0 {
+				return resp.XReadReply(outs)
+			}
+
+		case <-ctx.Done():
+			// check one more time to make sure we didn't miss anything
+			streams, _ = h.store.RangeStreamMulti(storeParams)
+			outs = h.constructXReadReply(storeParams, streams)
+
+			return resp.XReadReply(outs)
+		}
+	}
 }
+
+// func (h *Handler) handleXReadBlock(cmd parser.Command) string {
+// 	var wg sync.WaitGroup
+//
+// 	args, err := parser.ParseXReadBlockArgs(cmd)
+// 	if err != nil {
+// 		return resp.Error(err.Error())
+// 	}
+//
+// 	out := []resp.ReadStreamsReply{}
+// 	ctx, cancel := context.WithCancel(context.Background())
+// 	defer cancel()
+//
+// 	ch := make(chan xReadChanStruct)
+//
+// 	for i := range args.Streams {
+// 		wg.Add(1)
+// 		go func(ctx context.Context, stream parser.XReadStreamArgs) {
+// 			defer wg.Done()
+// 			entries, err := h.store.RangeStreamBlock(
+// 				ctx,
+// 				stream.Key,
+// 				stream.Start,
+// 				args.Timeout,
+// 			)
+//
+// 			var msg xReadChanStruct
+//
+// 			if err != nil {
+// 				msg.err = err
+// 				select {
+// 				case ch <- msg:
+// 				case <-ctx.Done():
+// 				}
+// 				return
+// 			}
+//
+// 			msg.reply = resp.ReadStreamsReply{Key: stream.Key}
+//
+// 			for j := range entries {
+// 				msg.reply.StreamReplies = append(msg.reply.StreamReplies, resp.StreamReply{
+// 					ID:     entries[j].ID.String(),
+// 					Fields: entries[j].FlatFields(),
+// 				})
+// 			}
+//
+// 			if len(msg.reply.StreamReplies) > 0 {
+// 				select {
+// 				case ch <- msg:
+// 				case <-ctx.Done():
+// 				}
+// 			}
+// 		}(ctx, args.Streams[i])
+// 	}
+//
+// 	go func() {
+// 		wg.Wait()
+// 		close(ch)
+// 	}()
+//
+// 	if args.Timeout == 0 {
+// 		// first one to read
+// 		msg, ok := <-ch
+// 		if ok {
+// 			if msg.err != nil {
+// 				return resp.Error(msg.err.Error())
+// 			}
+// 			out = append(out, msg.reply)
+// 		}
+//
+// 		canceled := false
+// 		// check again if another is sent in before exiting
+// 		for !canceled {
+// 			select {
+//
+// 			case msg, ok := <-ch:
+// 				if ok {
+// 					if msg.err != nil {
+// 						return resp.Error(msg.err.Error())
+// 					}
+// 					out = append(out, msg.reply)
+// 				}
+// 			case <-time.After(time.Duration(5 * time.Millisecond)):
+// 				cancel()
+// 				canceled = true
+// 			}
+// 		}
+//
+// 	} else {
+// 		time.AfterFunc(time.Duration(args.Timeout)*time.Millisecond, func() {
+// 			cancel()
+// 		})
+//
+// 		for msg := range ch {
+// 			if msg.err != nil {
+// 				return resp.Error(msg.err.Error())
+// 			}
+// 			out = append(out, msg.reply)
+// 		}
+// 	}
+//
+// 	if len(out) == 0 {
+// 		return resp.NullOrBulkStringArray(nil)
+// 	}
+//
+// 	return resp.XReadReply(out)
+// }
 
 func (h *Handler) handleIncr(cmd parser.Command) string {
 	args, err := parser.ParseIncrArgs(cmd)
@@ -408,4 +483,32 @@ func (h *Handler) handleIncr(cmd parser.Command) string {
 	}
 
 	return resp.Integer(res)
+}
+
+func (h *Handler) constructXReadReply(
+	storeParams []store.RangeMultiArgs,
+	streams [][]store.StreamEntry,
+) []resp.ReadStreamsReply {
+	outs := make([]resp.ReadStreamsReply, 0, len(storeParams))
+
+	for i, s := range storeParams {
+		if len(streams[i]) == 0 {
+			continue
+		}
+
+		out := resp.ReadStreamsReply{
+			Key:           s.Key,
+			StreamReplies: make([]resp.StreamReply, 0, len(streams[i])),
+		}
+
+		for _, k := range streams[i] {
+			out.StreamReplies = append(out.StreamReplies, resp.StreamReply{
+				ID:     k.ID.String(),
+				Fields: k.FlatFields(),
+			})
+		}
+
+		outs = append(outs, out)
+	}
+	return outs
 }
