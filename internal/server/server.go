@@ -39,15 +39,16 @@ func (s *Server) ListenAndAccept() error {
 		return fmt.Errorf("failed to bind to port 6379: %w", err)
 	}
 
+	defer l.Close()
+
 	s.l = l
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	go func() {
-		<-ctx.Done()
-		_ = l.Close()
-	}()
+	// go func() {
+	// <-ctx.Done()
+	// }()
 
 	for {
 		conn, err := s.l.Accept()
