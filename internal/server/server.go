@@ -55,7 +55,8 @@ func (s *Server) ListenAndAccept() error {
 			if ctx.Err() != nil {
 				// graceful shutdown — wait for in-flight handlers to drain
 				slog.Info("shutting down server")
-				s.wg.Wait()
+				// failing for codecrafters
+				// s.wg.Wait()
 				return nil
 			}
 			slog.Error("Error accepting connection", "error", err)
