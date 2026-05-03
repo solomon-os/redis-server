@@ -15,7 +15,7 @@ type Store struct {
 	kvList          map[string][]string
 	streams         map[string][]StreamEntry
 	listListeners   map[string][]chan string
-	streamListeners []chan struct{}
+	streamListeners []chan StreamEntry
 	sync.RWMutex
 }
 
@@ -68,7 +68,7 @@ func New() *Store {
 		kvList:          make(map[string][]string),
 		streams:         make(map[string][]StreamEntry),
 		listListeners:   make(map[string][]chan string),
-		streamListeners: []chan struct{}{},
+		streamListeners: []chan StreamEntry{},
 	}
 }
 
@@ -264,13 +264,13 @@ func (s *Store) RangeStreamMulti(keysAndIds []RangeMultiArgs) ([][]StreamEntry, 
 	return out, nil
 }
 
-func (s *Store) StreamSub() chan struct{} {
+func (s *Store) StreamSub() chan StreamEntry {
 	s.Lock()
 	defer s.Unlock()
 	return s.createStreamListenerUnlocked()
 }
 
-func (s *Store) StreamUnSub(ch chan struct{}) {
+func (s *Store) StreamUnSub(ch chan StreamEntry) {
 	s.Lock()
 	defer s.Unlock()
 	s.removeStreamListenerUnlocked(ch)
@@ -415,18 +415,18 @@ func (s *Store) SetStream(k, req string, fields map[string]string) (string, erro
 	}
 
 	stream := StreamEntry{ID: id, Fields: fields}
+	s.streams[k] = append(s.streams[k], stream)
 
 	// do this under lock so that a listener is not closed while sending
 	// channel is buffered up to 10 inputes so sending will not block
 	for i := range s.streamListeners {
 		select {
 		// so incase it blocks due to lack of proper clean
-		case s.streamListeners[i] <- struct{}{}:
+		case s.streamListeners[i] <- stream:
 		default:
 		}
 	}
 
-	s.streams[k] = append(s.streams[k], stream)
 	return id.String(), nil
 }
 
@@ -464,15 +464,15 @@ func (s *Store) removeListListener(k string, currListener chan string) {
 	close(currListener)
 }
 
-func (s *Store) createStreamListenerUnlocked() chan struct{} {
-	listener := make(chan struct{}, 10)
+func (s *Store) createStreamListenerUnlocked() chan StreamEntry {
+	listener := make(chan StreamEntry, 10)
 
 	s.streamListeners = append(s.streamListeners, listener)
 
 	return listener
 }
 
-func (s *Store) removeStreamListenerUnlocked(currListener chan struct{}) {
+func (s *Store) removeStreamListenerUnlocked(currListener chan StreamEntry) {
 	idx := slices.Index(s.streamListeners, currListener)
 	if idx >= 0 {
 		s.streamListeners = slices.Delete(s.streamListeners, idx, idx+1)

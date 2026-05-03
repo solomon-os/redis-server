@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/codecrafters-io/redis-starter-go/internal/client"
@@ -333,21 +334,32 @@ func (h *Handler) handleXReadBlock(parentCtx context.Context, cmd parser.Command
 		)
 	}
 
-	streams, err := h.store.RangeStreamMulti(storeParams)
-	if err != nil {
-		return resp.Error(err.Error())
-	}
+	var streams [][]store.StreamEntry
+	var outs []resp.ReadStreamsReply
 
-	outs := h.constructXReadReply(storeParams, streams)
+	log.Println(storeParams)
 
-	if len(outs) > 0 {
-		return resp.XReadReply(outs)
+	if len(storeParams) == 1 && storeParams[0].Start != "$" {
+		streams, err = h.store.RangeStreamMulti(storeParams)
+		if err != nil {
+			return resp.Error(err.Error())
+		}
+
+		outs = h.constructXReadReply(storeParams, streams)
+
+		if len(outs) > 0 {
+			return resp.XReadReply(outs)
+		}
 	}
 
 	for {
 		select {
-		case <-channel:
-			streams, _ = h.store.RangeStreamMulti(storeParams)
+		case stream := <-channel:
+			if storeParams[0].Start == "$" {
+				streams = [][]store.StreamEntry{{stream}}
+			} else {
+				streams, _ = h.store.RangeStreamMulti(storeParams)
+			}
 			outs = h.constructXReadReply(storeParams, streams)
 			if len(outs) > 0 {
 				return resp.XReadReply(outs)
@@ -355,7 +367,9 @@ func (h *Handler) handleXReadBlock(parentCtx context.Context, cmd parser.Command
 
 		case <-ctx.Done():
 			// check one more time to make sure we didn't miss anything
-			streams, _ = h.store.RangeStreamMulti(storeParams)
+			if storeParams[0].Start != "$" {
+				streams, _ = h.store.RangeStreamMulti(storeParams)
+			}
 			outs = h.constructXReadReply(storeParams, streams)
 
 			return resp.XReadReply(outs)
@@ -393,24 +407,26 @@ func (h *Handler) constructXReadReply(
 ) []resp.ReadStreamsReply {
 	outs := make([]resp.ReadStreamsReply, 0, len(storeParams))
 
-	for i, s := range storeParams {
-		if len(streams[i]) == 0 {
-			continue
-		}
+	if len(streams) > 0 {
+		for i, s := range storeParams {
+			if len(streams[i]) == 0 {
+				continue
+			}
 
-		out := resp.ReadStreamsReply{
-			Key:           s.Key,
-			StreamReplies: make([]resp.StreamReply, 0, len(streams[i])),
-		}
+			out := resp.ReadStreamsReply{
+				Key:           s.Key,
+				StreamReplies: make([]resp.StreamReply, 0, len(streams[i])),
+			}
 
-		for _, k := range streams[i] {
-			out.StreamReplies = append(out.StreamReplies, resp.StreamReply{
-				ID:     k.ID.String(),
-				Fields: k.FlatFields(),
-			})
-		}
+			for _, k := range streams[i] {
+				out.StreamReplies = append(out.StreamReplies, resp.StreamReply{
+					ID:     k.ID.String(),
+					Fields: k.FlatFields(),
+				})
+			}
 
-		outs = append(outs, out)
+			outs = append(outs, out)
+		}
 	}
 	return outs
 }

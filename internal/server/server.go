@@ -48,6 +48,7 @@ func (s *Server) ListenAndAccept() error {
 
 	// go func() {
 	// <-ctx.Done()
+	// l.Close()
 	// }()
 
 	for {
