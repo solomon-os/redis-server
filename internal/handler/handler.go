@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/codecrafters-io/redis-starter-go/internal/client"
 	"github.com/codecrafters-io/redis-starter-go/internal/parser"
 	"github.com/codecrafters-io/redis-starter-go/internal/resp"
 	"github.com/codecrafters-io/redis-starter-go/internal/store"
@@ -14,89 +15,87 @@ type Handler struct {
 	store *store.Store
 }
 
-type xReadChanStruct struct {
-	reply resp.ReadStreamsReply
-	err   error
-}
-
 func New(store *store.Store) *Handler {
-	return &Handler{store}
+	return &Handler{store: store}
 }
 
-func (h *Handler) Handle(raw string) (string, error) {
+func (h *Handler) Handle(ctx context.Context, conn *client.Conn, raw string) (string, error) {
 	cmd, err := parser.Parse(raw)
 	if err != nil {
 		return "", fmt.Errorf("couldn't parse message: %v", err)
 	}
 
-	response := h.handleCommand(cmd)
+	response := h.handleCommand(ctx, conn, cmd)
 	return response, nil
 }
 
-func (h *Handler) handleCommand(cmd parser.Command) string {
+func (h *Handler) handleCommand(ctx context.Context, conn *client.Conn, cmd parser.Command) string {
 	switch cmd.Name {
 	case "PING":
-		return h.handlePing(cmd)
+		return h.handlePing(ctx, cmd)
 
 	case "ECHO":
-		return h.handleEcho(cmd)
+		return h.handleEcho(ctx, cmd)
 
 	case "SET":
-		return h.handleSet(cmd)
+		return h.handleSet(ctx, cmd)
 
 	case "GET":
-		return h.handleGet(cmd)
+		return h.handleGet(ctx, cmd)
 
 	case "RPUSH":
-		return h.handleRPush(cmd)
+		return h.handleRPush(ctx, cmd)
 
 	case "LRANGE":
-		return h.handleLRange(cmd)
+		return h.handleLRange(ctx, cmd)
 
 	case "LPUSH":
-		return h.handleLPush(cmd)
+		return h.handleLPush(ctx, cmd)
 
 	case "LLEN":
-		return h.handleLLen(cmd)
+		return h.handleLLen(ctx, cmd)
 
 	case "LPOP":
-		return h.handleLPop(cmd)
+		return h.handleLPop(ctx, cmd)
 
 	case "BLPOP":
-		return h.handleBLPop(cmd)
+		return h.handleBLPop(ctx, cmd)
 
 	case "TYPE":
-		return h.handleType(cmd)
+		return h.handleType(ctx, cmd)
 
 	case "XADD":
-		return h.handleXAdd(cmd)
+		return h.handleXAdd(ctx, cmd)
 
 	case "XRANGE":
-		return h.handleXRange(cmd)
+		return h.handleXRange(ctx, cmd)
 
 	case "XREAD":
-		return h.handleXRead(cmd)
+		return h.handleXRead(ctx, cmd)
 
 	case "INCR":
-		return h.handleIncr(cmd)
+		return h.handleIncr(ctx, cmd)
+
+	case "MULTI":
+		return h.handleMulti(ctx, conn, cmd)
 
 	default:
 		return resp.Error("unknown command")
 	}
 }
 
-func (h *Handler) handlePing(_ parser.Command) string {
+func (h *Handler) handlePing(_ context.Context, _ parser.Command) string {
 	return resp.SimpleString("PONG")
 }
 
-func (h *Handler) handleEcho(cmd parser.Command) string {
+func (h *Handler) handleEcho(_ context.Context, cmd parser.Command) string {
 	if len(cmd.Args) < 1 {
 		return resp.Error("wrong number of arguments for 'echo' command")
 	}
 	return resp.BulkString(cmd.Args[0])
 }
 
-func (h *Handler) handleGet(cmd parser.Command) string {
+func (h *Handler) handleGet(_ context.Context, cmd parser.Command) string {
 	if len(cmd.Args) < 1 {
 		return resp.Error("wrong number of arguments for 'get' command")
 	}
@@ -107,7 +106,7 @@ func (h *Handler) handleGet(cmd parser.Command) string {
 	return resp.BulkString(val)
 }
 
-func (h *Handler) handleSet(cmd parser.Command) string {
+func (h *Handler) handleSet(_ context.Context, cmd parser.Command) string {
 	args, err := parser.ParseSetArgs(cmd)
 	if err != nil {
 		return resp.Error(err.Error())
@@ -116,7 +115,7 @@ func (h *Handler) handleSet(cmd parser.Command) string {
 	return resp.SimpleString("OK")
 }
 
-func (h *Handler) handleRPush(cmd parser.Command) string {
+func (h *Handler) handleRPush(_ context.Context, cmd parser.Command) string {
 	args, err := parser.ParsePushArgs(cmd)
 	if err != nil {
 		return resp.Error(err.Error())
@@ -125,7 +124,7 @@ func (h *Handler) handleRPush(cmd parser.Command) string {
 	return resp.Integer(size)
 }
 
-func (h *Handler) handleLRange(cmd parser.Command) string {
+func (h *Handler) handleLRange(_ context.Context, cmd parser.Command) string {
 	args, err := parser.ParseRangeArgs(cmd)
 	if err != nil {
 		return resp.Error(err.Error())
@@ -134,7 +133,7 @@ func (h *Handler) handleLRange(cmd parser.Command) string {
 	return resp.BulkStringArray(list)
 }
 
-func (h *Handler) handleLPush(cmd parser.Command) string {
+func (h *Handler) handleLPush(_ context.Context, cmd parser.Command) string {
 	args, err := parser.ParsePushArgs(cmd)
 	if err != nil {
 		return resp.Error(err.Error())
@@ -143,7 +142,7 @@ func (h *Handler) handleLPush(cmd parser.Command) string {
 	return resp.Integer(size)
 }
 
-func (h *Handler) handleLLen(cmd parser.Command) string {
+func (h *Handler) handleLLen(_ context.Context, cmd parser.Command) string {
 	args, err := parser.ParseLenArgs(cmd)
 	if err != nil {
 		return resp.Error(err.Error())
@@ -152,7 +151,7 @@ func (h *Handler) handleLLen(cmd parser.Command) string {
 	return resp.Integer(len)
 }
 
-func (h *Handler) handleLPop(cmd parser.Command) string {
+func (h *Handler) handleLPop(_ context.Context, cmd parser.Command) string {
 	args, err := parser.ParsePopArgs(cmd)
 	if err != nil {
 		return resp.Error(err.Error())
@@ -174,7 +173,7 @@ func (h *Handler) handleLPop(cmd parser.Command) string {
 	return resp.BulkStringArray(popedItems)
 }
 
-func (h *Handler) handleBLPop(cmd parser.Command) string {
+func (h *Handler) handleBLPop(_ context.Context, cmd parser.Command) string {
 	args, err := parser.ParseBPopArgs(cmd)
 	if err != nil {
 		return resp.Error(err.Error())
@@ -190,7 +189,7 @@ func (h *Handler) handleBLPop(cmd parser.Command) string {
 	return resp.BulkStringArray(items)
 }
 
-func (h *Handler) handleType(cmd parser.Command) string {
+func (h *Handler) handleType(_ context.Context, cmd parser.Command) string {
 	args, err := parser.ParseTypeArgs(cmd)
 	if err != nil {
 		return resp.Error(err.Error())
@@ -204,7 +203,7 @@ func (h *Handler) handleType(cmd parser.Command) string {
 	return resp.SimpleString(keyType)
 }
 
-func (h *Handler) handleXAdd(cmd parser.Command) string {
+func (h *Handler) handleXAdd(_ context.Context, cmd parser.Command) string {
 	args, err := parser.ParseStreamArgs(cmd)
 	if err != nil {
 		return resp.Error(fmt.Sprintf("xadd command failed: %v", err))
@@ -218,7 +217,7 @@ func (h *Handler) handleXAdd(cmd parser.Command) string {
 	return resp.BulkString(id)
 }
 
-func (h *Handler) handleXRange(cmd parser.Command) string {
+func (h *Handler) handleXRange(_ context.Context, cmd parser.Command) string {
 	args, err := parser.ParseXRangeArgs(cmd)
 	if err != nil {
 		return resp.Error(err.Error())
@@ -240,7 +239,7 @@ func (h *Handler) handleXRange(cmd parser.Command) string {
 	return resp.XRangeReply(out)
 }
 
-func (h *Handler) handleXRead(cmd parser.Command) string {
+func (h *Handler) handleXRead(ctx context.Context, cmd parser.Command) string {
 	xreadCmd, err := parser.ParseXReadArgs(cmd)
 	if err != nil {
 		return resp.Error(err.Error())
@@ -248,15 +247,15 @@ func (h *Handler) handleXRead(cmd parser.Command) string {
 
 	switch xreadCmd.Name {
 	case "STREAMS":
-		return h.handleXReadStreams(xreadCmd)
+		return h.handleXReadStreams(ctx, xreadCmd)
 	case "BLOCK":
-		return h.handleXReadBlock2(xreadCmd)
+		return h.handleXReadBlock(ctx, xreadCmd)
 	}
 
 	return resp.Error("xread command not supported")
 }
 
-func (h *Handler) handleXReadStreams(cmd parser.Command) string {
+func (h *Handler) handleXReadStreams(_ context.Context, cmd parser.Command) string {
 	args, err := parser.ParseXReadStreamArgs(cmd)
 	if err != nil {
 		return resp.Error(err.Error())
@@ -305,13 +304,13 @@ func (h *Handler) handleXReadStreams(cmd parser.Command) string {
 	return resp.XReadReply(outs)
 }
 
-func (h *Handler) handleXReadBlock2(cmd parser.Command) string {
+func (h *Handler) handleXReadBlock(parentCtx context.Context, cmd parser.Command) string {
 	args, err := parser.ParseXReadBlockArgs(cmd)
 	if err != nil {
 		return resp.Error(err.Error())
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(parentCtx)
 	defer cancel()
 
 	if args.Timeout > 0 {
@@ -364,114 +363,7 @@ func (h *Handler) handleXReadBlock2(cmd parser.Command) string {
 	}
 }
 
-// func (h *Handler) handleXReadBlock(cmd parser.Command) string {
-// 	var wg sync.WaitGroup
-//
-// 	args, err := parser.ParseXReadBlockArgs(cmd)
-// 	if err != nil {
-// 		return resp.Error(err.Error())
-// 	}
-//
-// 	out := []resp.ReadStreamsReply{}
-// 	ctx, cancel := context.WithCancel(context.Background())
-// 	defer cancel()
-//
-// 	ch := make(chan xReadChanStruct)
-//
-// 	for i := range args.Streams {
-// 		wg.Add(1)
-// 		go func(ctx context.Context, stream parser.XReadStreamArgs) {
-// 			defer wg.Done()
-// 			entries, err := h.store.RangeStreamBlock(
-// 				ctx,
-// 				stream.Key,
-// 				stream.Start,
-// 				args.Timeout,
-// 			)
-//
-// 			var msg xReadChanStruct
-//
-// 			if err != nil {
-// 				msg.err = err
-// 				select {
-// 				case ch <- msg:
-// 				case <-ctx.Done():
-// 				}
-// 				return
-// 			}
-//
-// 			msg.reply = resp.ReadStreamsReply{Key: stream.Key}
-//
-// 			for j := range entries {
-// 				msg.reply.StreamReplies = append(msg.reply.StreamReplies, resp.StreamReply{
-// 					ID:     entries[j].ID.String(),
-// 					Fields: entries[j].FlatFields(),
-// 				})
-// 			}
-//
-// 			if len(msg.reply.StreamReplies) > 0 {
-// 				select {
-// 				case ch <- msg:
-// 				case <-ctx.Done():
-// 				}
-// 			}
-// 		}(ctx, args.Streams[i])
-// 	}
-//
-// 	go func() {
-// 		wg.Wait()
-// 		close(ch)
-// 	}()
-//
-// 	if args.Timeout == 0 {
-// 		// first one to read
-// 		msg, ok := <-ch
-// 		if ok {
-// 			if msg.err != nil {
-// 				return resp.Error(msg.err.Error())
-// 			}
-// 			out = append(out, msg.reply)
-// 		}
-//
-// 		canceled := false
-// 		// check again if another is sent in before exiting
-// 		for !canceled {
-// 			select {
-//
-// 			case msg, ok := <-ch:
-// 				if ok {
-// 					if msg.err != nil {
-// 						return resp.Error(msg.err.Error())
-// 					}
-// 					out = append(out, msg.reply)
-// 				}
-// 			case <-time.After(time.Duration(5 * time.Millisecond)):
-// 				cancel()
-// 				canceled = true
-// 			}
-// 		}
-//
-// 	} else {
-// 		time.AfterFunc(time.Duration(args.Timeout)*time.Millisecond, func() {
-// 			cancel()
-// 		})
-//
-// 		for msg := range ch {
-// 			if msg.err != nil {
-// 				return resp.Error(msg.err.Error())
-// 			}
-// 			out = append(out, msg.reply)
-// 		}
-// 	}
-//
-// 	if len(out) == 0 {
-// 		return resp.NullOrBulkStringArray(nil)
-// 	}
-//
-// 	return resp.XReadReply(out)
-// }
-
-func (h *Handler) handleIncr(cmd parser.Command) string {
+func (h *Handler) handleIncr(_ context.Context, cmd parser.Command) string {
 	args, err := parser.ParseIncrArgs(cmd)
 	if err != nil {
 		return resp.Error(err.Error())
@@ -483,6 +375,16 @@ func (h *Handler) handleIncr(cmd parser.Command) string {
 	}
 
 	return resp.Integer(res)
+}
+
+func (h *Handler) handleMulti(_ context.Context, conn *client.Conn, cmd parser.Command) string {
+	// check if client already has an active transaction
+
+	if conn.InTx {
+		return resp.Error("ERR Multi calls cannot be nested")
+	}
+
+	return resp.SimpleString("OK")
 }
 
 func (h *Handler) constructXReadReply(
