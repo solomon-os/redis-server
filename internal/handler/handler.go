@@ -117,8 +117,8 @@ func (h *Handler) handleGet(_ context.Context, conn *client.Conn, cmd parser.Com
 		return resp.Error("wrong number of arguments for 'get' command")
 	}
 
-	if conn.InTransaction() {
-		conn.EnQueueCommand(cmd)
+	enqueued := EnqueueComandIfTransactionAndNotExecuting(conn, cmd)
+	if enqueued {
 		return resp.SimpleString("QUEUED")
 	}
 
