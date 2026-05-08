@@ -527,10 +527,10 @@ func (h *Handler) handleIncr(_ context.Context, conn *client.Conn, cmd parser.Co
 		return resp.Error(err.Error())
 	}
 
-	err = h.store.ValidateKeyIsInt(args.Key)
-	if err != nil {
-		return resp.Error(err.Error())
-	}
+	// err = h.store.ValidateKeyIsInt(args.Key)
+	// if err != nil {
+	// 	return resp.Error(err.Error())
+	// }
 
 	enqueued := EnqueueComandIfTransactionAndNotExecuting(conn, cmd)
 	if enqueued {
