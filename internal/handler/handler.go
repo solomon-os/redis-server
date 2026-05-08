@@ -606,7 +606,7 @@ func (h *Handler) handleAcl(_ context.Context, conn *client.Conn, cmd parser.Com
 	case "WHOAMI":
 		return resp.BulkString("default")
 	case "GETUSER":
-		return resp.StringArray([]string{"flags", resp.StringArray([]string{})})
+		return resp.StringArray([]string{resp.BulkString("flags"), resp.StringArray([]string{})})
 	}
 	return resp.Error("command not supported")
 }
