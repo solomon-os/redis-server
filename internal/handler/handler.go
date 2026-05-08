@@ -315,9 +315,11 @@ func (h *Handler) handleXRange(_ context.Context, conn *client.Conn, cmd parser.
 	}
 
 	// validate id first before queueing command
-	_, _, _, _, err = store.ParseStreamID(args.Start)
-	if err != nil {
-		return resp.Error(err.Error())
+	if args.Start != "-" {
+		_, _, _, _, err = store.ParseStreamID(args.Start)
+		if err != nil {
+			return resp.Error(err.Error())
+		}
 	}
 
 	if args.End != "+" {
