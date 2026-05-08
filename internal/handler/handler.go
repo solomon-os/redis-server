@@ -96,6 +96,9 @@ func (h *Handler) handleCommand(ctx context.Context, conn *client.Conn, cmd pars
 	case "EXEC":
 		return h.handleExec(ctx, conn, cmd)
 
+	case "DISCARD":
+		return h.handleDiscard(ctx, conn, cmd)
+
 	default:
 		return resp.Error("unknown command")
 	}
@@ -572,12 +575,21 @@ func (h *Handler) handleExec(ctx context.Context, conn *client.Conn, _ parser.Co
 	}
 
 	h.locked = false
-	conn.EndTransactionAndExection()
+	conn.ClearTransaction()
 
 	h.cond.Broadcast()
 	h.cond.L.Unlock()
 
 	return resp.StringArray(responses)
+}
+
+func (h *Handler) handleDiscard(_ context.Context, conn *client.Conn, _ parser.Command) string {
+	if conn.InTransaction() {
+		conn.ClearTransaction()
+		return resp.SimpleString("OK")
+	}
+
+	return resp.Error("DISCARD without MULTI")
 }
 
 func (h *Handler) constructXReadReply(

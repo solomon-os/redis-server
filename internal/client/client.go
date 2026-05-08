@@ -41,8 +41,8 @@ func (c *Conn) ExecuteTransaction() {
 	c.execTx = true
 }
 
-func (c *Conn) EndTransactionAndExection() {
-	c.inTx, c.execTx = false, false
+func (c *Conn) ClearTransaction() {
+	c.inTx, c.execTx, c.queued = false, false, []parser.Command{}
 }
 
 func (c *Conn) QueuedCommand() []parser.Command {
