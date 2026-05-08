@@ -5,6 +5,7 @@ import (
 	"slices"
 
 	"github.com/codecrafters-io/redis-starter-go/internal/parser"
+	"github.com/codecrafters-io/redis-starter-go/internal/users"
 )
 
 type Conn struct {
@@ -12,12 +13,14 @@ type Conn struct {
 	inTx   bool
 	execTx bool
 	net.Conn
+	user *users.User
 }
 
-func New(conn net.Conn) *Conn {
+func New(conn net.Conn, user *users.User) *Conn {
 	return &Conn{
 		queued: []parser.Command{},
 		Conn:   conn,
+		user:   user,
 	}
 }
 
@@ -47,4 +50,12 @@ func (c *Conn) ClearTransaction() {
 
 func (c *Conn) QueuedCommand() []parser.Command {
 	return slices.Clone(c.queued)
+}
+
+func (c *Conn) GetUserFlags() []string {
+	return c.user.Flags()
+}
+
+func (c *Conn) GetUserName() string {
+	return c.user.Name()
 }

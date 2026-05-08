@@ -15,6 +15,7 @@ import (
 	"github.com/codecrafters-io/redis-starter-go/internal/handler"
 	"github.com/codecrafters-io/redis-starter-go/internal/resp"
 	"github.com/codecrafters-io/redis-starter-go/internal/store"
+	"github.com/codecrafters-io/redis-starter-go/internal/users"
 )
 
 type Server struct {
@@ -64,7 +65,10 @@ func (s *Server) ListenAndAccept() error {
 			slog.Error("Error accepting connection", "error", err)
 			continue
 		}
-		c := client.New(conn)
+
+		user := users.Users["default"] // assign default user
+
+		c := client.New(conn, user)
 		s.wg.Go(func() {
 			s.handleConnection(ctx, c)
 		})

@@ -11,6 +11,7 @@ import (
 	"github.com/codecrafters-io/redis-starter-go/internal/parser"
 	"github.com/codecrafters-io/redis-starter-go/internal/resp"
 	"github.com/codecrafters-io/redis-starter-go/internal/store"
+	"github.com/codecrafters-io/redis-starter-go/internal/users"
 )
 
 type Handler struct {
@@ -604,9 +605,16 @@ func (h *Handler) handleAcl(_ context.Context, conn *client.Conn, cmd parser.Com
 
 	switch strings.ToUpper(arg.Cmd) {
 	case "WHOAMI":
-		return resp.BulkString("default")
+		return resp.BulkString(conn.GetUserName())
 	case "GETUSER":
-		return resp.StringArray([]string{resp.BulkString("flags"), resp.StringArray([]string{})})
+		out := []string{resp.BulkString("flags"), resp.BulkStringArray([]string{})}
+		// get user
+		user, ok := users.Users[arg.Username]
+		if !ok {
+			return resp.StringArray(out)
+		}
+		out[1] = resp.BulkStringArray(user.Flags())
+		return resp.StringArray(out)
 	}
 	return resp.Error("command not supported")
 }
