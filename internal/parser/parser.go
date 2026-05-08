@@ -77,6 +77,10 @@ type StreamArgs struct {
 	Fields map[string]string
 }
 
+type AclArgs struct {
+	Cmd string
+}
+
 func Parse(input string) (Command, error) {
 	if len(input) == 0 {
 		return Command{}, errors.New("empty input")
@@ -333,6 +337,14 @@ func ParseStreamArgs(cmd Command) (StreamArgs, error) {
 	args.Fields = fields
 
 	return args, nil
+}
+
+func ParseAclArgs(cmd Command) (AclArgs, error) {
+	if len(cmd.Args) < 1 {
+		return AclArgs{}, errors.New("wrong number of arguments for ACL")
+	}
+
+	return AclArgs{Cmd: cmd.Args[0]}, nil
 }
 
 func parseInt(s string) int {

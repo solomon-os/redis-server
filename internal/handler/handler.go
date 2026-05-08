@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -590,6 +591,18 @@ func (h *Handler) handleDiscard(_ context.Context, conn *client.Conn, _ parser.C
 	}
 
 	return resp.Error("DISCARD without MULTI")
+}
+
+func (h *Handler) handleAcl(_ context.Context, conn *client.Conn, cmd parser.Command) string {
+	arg, err := parser.ParseAclArgs(cmd)
+	if err != nil {
+		return resp.Error(err.Error())
+	}
+
+	switch strings.ToUpper(arg.Cmd) {
+	default:
+		return resp.BulkString("default")
+	}
 }
 
 func (h *Handler) constructXReadReply(
