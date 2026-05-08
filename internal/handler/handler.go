@@ -552,7 +552,7 @@ func (h *Handler) handleMulti(_ context.Context, conn *client.Conn, cmd parser.C
 
 func (h *Handler) handleExec(ctx context.Context, conn *client.Conn, _ parser.Command) string {
 	if !conn.InTransaction() {
-		return resp.Error("ERR EXEC without MULTI")
+		return resp.Error("EXEC without MULTI")
 	}
 
 	h.cond.L.Lock()
