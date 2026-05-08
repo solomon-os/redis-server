@@ -100,6 +100,9 @@ func (h *Handler) handleCommand(ctx context.Context, conn *client.Conn, cmd pars
 	case "DISCARD":
 		return h.handleDiscard(ctx, conn, cmd)
 
+	case "ACL":
+		return h.handleAcl(ctx, conn, cmd)
+
 	default:
 		return resp.Error("unknown command")
 	}
