@@ -73,10 +73,14 @@ func (s *Server) ListenAndAccept() error {
 
 func (s *Server) handleConnection(ctx context.Context, c *client.Conn) {
 	defer func() {
-		if err := c.Close(); err != nil {
+		if err := c.Close(); err != nil && !errors.Is(err, net.ErrClosed) {
 			slog.Error("failed to close connection", "error", err)
 		}
 	}()
+
+	// closes all store listeners when client disconnects
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 
 	// closing the conn from a watcher goroutine interrupts a blocking Read on shutdown
 	done := make(chan struct{})

@@ -193,12 +193,12 @@ func (s *Store) LRange(k string, start, end int) []string {
 }
 
 func (s *Store) rangeStreamUnlocked(k string, start, end string) ([]StreamEntry, error) {
-	startId, startSeq, _, _, err := parseStreamID(start)
+	startId, startSeq, _, _, err := ParseStreamID(start)
 	if start != "0" && start != "-" && startId == 0 && err != nil {
 		return nil, err
 	}
 
-	endId, endSeq, _, _, err := parseStreamID(end)
+	endId, endSeq, _, _, err := ParseStreamID(end)
 	if end != "0" && end != "+" && endId == 0 && err != nil {
 		return nil, err
 	}
@@ -380,6 +380,17 @@ func (s *Store) KeyType(k string) string {
 	return ""
 }
 
+func (s *Store) ValidateKeyIsInt(k string) error {
+	if val, exist := s.kv[k]; exist {
+		_, err := strconv.Atoi(val.value)
+		if err != nil {
+			return errors.New("value is not an integer or out of range")
+		}
+	}
+
+	return nil
+}
+
 func (s *Store) IncrementKv(k string) (int, error) {
 	s.Lock()
 	defer s.Unlock()
@@ -490,7 +501,7 @@ func (s *Store) removeKey(key string) func() {
 	}
 }
 
-func parseStreamID(s string) (ms, seq int, msAuto, seqAuto bool, err error) {
+func ParseStreamID(s string) (ms, seq int, msAuto, seqAuto bool, err error) {
 	if s == "*" {
 		msAuto = true
 		return
@@ -524,7 +535,7 @@ func parseStreamID(s string) (ms, seq int, msAuto, seqAuto bool, err error) {
 }
 
 func resolveStreamID(req string, last *streamID) (streamID, error) {
-	ms, seq, msAuto, seqAuto, err := parseStreamID(req)
+	ms, seq, msAuto, seqAuto, err := ParseStreamID(req)
 	if err != nil {
 		return streamID{}, err
 	}

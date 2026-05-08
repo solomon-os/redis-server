@@ -42,6 +42,18 @@ func BulkStringArray(s []string) string {
 	return str.String()
 }
 
+func StringArray(s []string) string {
+	var str strings.Builder
+
+	fmt.Fprintf(&str, "*%d\r\n", len(s))
+
+	for _, item := range s {
+		str.WriteString(item)
+	}
+
+	return str.String()
+}
+
 func XRangeReply(s []StreamReply) string {
 	var str strings.Builder
 
