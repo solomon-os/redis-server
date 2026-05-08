@@ -607,13 +607,19 @@ func (h *Handler) handleAcl(_ context.Context, conn *client.Conn, cmd parser.Com
 	case "WHOAMI":
 		return resp.BulkString(conn.GetUserName())
 	case "GETUSER":
-		out := []string{resp.BulkString("flags"), resp.BulkStringArray([]string{})}
+		out := []string{
+			resp.BulkString("flags"),
+			resp.BulkStringArray([]string{}),
+			resp.BulkString("passwords"),
+			resp.BulkStringArray([]string{}),
+		}
 		// get user
 		user, ok := users.Users[arg.Username]
 		if !ok {
 			return resp.StringArray(out)
 		}
 		out[1] = resp.BulkStringArray(user.Flags())
+		out[3] = resp.BulkStringArray(user.Passwords())
 		return resp.StringArray(out)
 	}
 	return resp.Error("command not supported")

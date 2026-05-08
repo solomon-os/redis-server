@@ -3,8 +3,9 @@ package users
 import "slices"
 
 type User struct {
-	flags []string
-	name  string
+	flags     []string
+	passwords []string
+	name      string
 }
 
 var Users map[string]*User
@@ -24,6 +25,10 @@ func newDefaultUser() *User {
 
 func (u *User) Flags() []string {
 	return slices.Clone(u.flags)
+}
+
+func (u *User) Passwords() []string {
+	return slices.Clone(u.passwords)
 }
 
 func (u *User) Name() string {
