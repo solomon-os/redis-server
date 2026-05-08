@@ -320,9 +320,11 @@ func (h *Handler) handleXRange(_ context.Context, conn *client.Conn, cmd parser.
 		return resp.Error(err.Error())
 	}
 
-	_, _, _, _, err = store.ParseStreamID(args.End)
-	if err != nil {
-		return resp.Error(err.Error())
+	if args.End != "+" {
+		_, _, _, _, err = store.ParseStreamID(args.End)
+		if err != nil {
+			return resp.Error(err.Error())
+		}
 	}
 
 	enqueued := EnqueueComandIfTransactionAndNotExecuting(conn, cmd)
