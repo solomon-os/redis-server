@@ -603,9 +603,12 @@ func (h *Handler) handleAcl(_ context.Context, conn *client.Conn, cmd parser.Com
 	}
 
 	switch strings.ToUpper(arg.Cmd) {
-	default:
+	case "WHOAMI":
 		return resp.BulkString("default")
+	case "GETUSER":
+		return resp.StringArray([]string{"flags", resp.StringArray([]string{})})
 	}
+	return resp.Error("command not supported")
 }
 
 func (h *Handler) constructXReadReply(
