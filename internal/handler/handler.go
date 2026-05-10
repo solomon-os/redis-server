@@ -605,12 +605,13 @@ func (h *Handler) handleAcl(_ context.Context, conn *client.Conn, cmd parser.Com
 		return resp.Error(err.Error())
 	}
 
-	user, userExist := users.Get(arg.Username)
-
 	switch strings.ToUpper(arg.Cmd) {
 	case "WHOAMI":
+		if !conn.IsAuthenticated() {
+			return resp.ErrorSimpleString("NOAUTH Authentication required.")
+		}
 		return resp.BulkString(conn.GetUserName())
-	case "GETUSER", "SETUSER":
+	case "GETUSER":
 		out := []string{
 			resp.BulkString("flags"),
 			resp.BulkStringArray([]string{}),
@@ -618,20 +619,19 @@ func (h *Handler) handleAcl(_ context.Context, conn *client.Conn, cmd parser.Com
 			resp.BulkStringArray([]string{}),
 		}
 
-		// get user
+		user, userExist := users.Get(arg.Username)
 		if !userExist {
 			return resp.StringArray(out)
-		}
-
-		if arg.AddPassword != "" {
-			user.AddPassword(arg.AddPassword)
-			users.Set(user)
-			return resp.SimpleString("OK")
 		}
 
 		out[1] = resp.BulkStringArray(user.Flags())
 		out[3] = resp.BulkStringArray(user.Passwords())
 		return resp.StringArray(out)
+
+	case "SETUSER":
+		conn.CreateUserWithPassword(arg.Username, arg.AddPassword)
+		return resp.SimpleString("OK")
+
 	}
 	return resp.Error("command not supported")
 }

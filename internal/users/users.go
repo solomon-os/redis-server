@@ -14,6 +14,11 @@ type snapshot struct {
 	passwords [][32]byte
 }
 
+type Details struct {
+	Flags     []string
+	Passwords [][32]byte
+}
+
 type User struct {
 	name    string
 	state   atomic.Pointer[snapshot]
@@ -42,10 +47,32 @@ func Set(u *User) {
 	registry[u.Name()] = u
 }
 
+func GetOrSet(name string) {
+}
+
 func newDefaultUser() *User {
 	u := &User{name: "default"}
 	u.state.Store(&snapshot{flags: []string{"nopass"}})
 	return u
+}
+
+func New(name, password string) *User {
+	mu.Lock()
+	defer mu.Unlock()
+
+	u, ok := registry[name]
+	if !ok {
+		u = &User{name: name}
+		u.state.Store(&snapshot{flags: []string{"nopass"}})
+	}
+
+	u.AddPassword(password)
+
+	return u
+}
+
+func HashPassword(password string) [32]byte {
+	return sha256.Sum256([]byte(password))
 }
 
 func (u *User) Flags() []string {
@@ -68,7 +95,7 @@ func (u *User) AddPassword(password string) {
 	cur := u.state.Load()
 	next := &snapshot{
 		flags:     slices.Clone(cur.flags),
-		passwords: append(slices.Clone(cur.passwords), sha256.Sum256([]byte(password))),
+		passwords: append(slices.Clone(cur.passwords), HashPassword(password)),
 	}
 	if idx := slices.Index(next.flags, "nopass"); idx >= 0 {
 		next.flags = slices.Delete(next.flags, idx, idx+1)
@@ -76,14 +103,22 @@ func (u *User) AddPassword(password string) {
 	u.state.Store(next)
 }
 
-func (u *User) CheckPassword(pwd string) bool {
-	hashedPassword := sha256.Sum256([]byte(pwd))
+func (u *User) CheckHashedPassword(hashedPassword [32]byte) bool {
 	passwords := u.state.Load().passwords
 	var match int
 	for i := range passwords {
 		match |= subtle.ConstantTimeCompare(passwords[i][:], hashedPassword[:])
 	}
 	return match == 1
+}
+
+func (u *User) CheckPassword(password string) bool {
+	hashedPassword := HashPassword(password)
+	return u.CheckHashedPassword(hashedPassword)
+}
+
+func (u *User) PasswordRequired() bool {
+	return !slices.Contains(u.state.Load().flags, "nopass")
 }
 
 func (u *User) Name() string {

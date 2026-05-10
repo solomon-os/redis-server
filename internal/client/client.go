@@ -13,7 +13,9 @@ type Conn struct {
 	inTx   bool
 	execTx bool
 	net.Conn
-	user *users.User
+	user            *users.User
+	isAuthenticated bool
+	password        [32]byte
 }
 
 func New(conn net.Conn, user *users.User) *Conn {
@@ -58,4 +60,26 @@ func (c *Conn) GetUserFlags() []string {
 
 func (c *Conn) GetUserName() string {
 	return c.user.Name()
+}
+
+func (c *Conn) CreateUserWithPassword(name, password string) {
+	c.user = users.New(name, password)
+	c.password = users.HashPassword(password)
+}
+
+func (c *Conn) IsAuthenticated() bool {
+	if c.user == nil {
+		return false
+	}
+
+	if !c.user.PasswordRequired() {
+		return true
+	}
+
+	return c.user.CheckHashedPassword(c.password)
+}
+
+func (c *Conn) AddPassword(password string) {
+	c.user.AddPassword(password)
+	c.password = users.HashPassword(password)
 }
