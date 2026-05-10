@@ -78,8 +78,9 @@ type StreamArgs struct {
 }
 
 type AclArgs struct {
-	Cmd      string
-	Username string
+	Cmd         string
+	Username    string
+	AddPassword string
 }
 
 func Parse(input string) (Command, error) {
@@ -353,6 +354,16 @@ func ParseAclArgs(cmd Command) (AclArgs, error) {
 			return AclArgs{}, errors.New("wrong number of arguments for ACL GETUSER")
 		}
 		arg.Username = cmd.Args[1]
+	case "SETUSER":
+		if len(cmd.Args) < 3 {
+			return AclArgs{}, errors.New("wrong number of arguments for ACL GETUSER")
+		}
+		arg.Username = cmd.Args[1]
+		if len(cmd.Args[2]) > 1 {
+			if cmd.Args[2][0] == '>' {
+				arg.AddPassword = cmd.Args[2][1:]
+			}
+		}
 	}
 
 	return arg, nil

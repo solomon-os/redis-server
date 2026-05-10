@@ -1,6 +1,10 @@
 package users
 
-import "slices"
+import (
+	"crypto/sha256"
+	"fmt"
+	"slices"
+)
 
 type User struct {
 	flags     []string
@@ -29,6 +33,14 @@ func (u *User) Flags() []string {
 
 func (u *User) Passwords() []string {
 	return slices.Clone(u.passwords)
+}
+
+func (u *User) AddPassword(password string) {
+	u.passwords = append(u.passwords, fmt.Sprintf("%x", sha256.Sum256([]byte(password))))
+	idx := slices.Index(u.flags, "nopass")
+	if idx >= 0 {
+		u.flags = slices.Delete(u.flags, idx, idx+1)
+	}
 }
 
 func (u *User) Name() string {

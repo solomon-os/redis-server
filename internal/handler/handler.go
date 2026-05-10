@@ -603,21 +603,30 @@ func (h *Handler) handleAcl(_ context.Context, conn *client.Conn, cmd parser.Com
 		return resp.Error(err.Error())
 	}
 
+	user, userExist := users.Users[arg.Username]
+
 	switch strings.ToUpper(arg.Cmd) {
 	case "WHOAMI":
 		return resp.BulkString(conn.GetUserName())
-	case "GETUSER":
+	case "GETUSER", "SETUSER":
 		out := []string{
 			resp.BulkString("flags"),
 			resp.BulkStringArray([]string{}),
 			resp.BulkString("passwords"),
 			resp.BulkStringArray([]string{}),
 		}
+
 		// get user
-		user, ok := users.Users[arg.Username]
-		if !ok {
+		if !userExist {
 			return resp.StringArray(out)
 		}
+
+		if arg.AddPassword != "" {
+			user.AddPassword(arg.AddPassword)
+			users.Users[user.Name()] = user
+			return resp.SimpleString("OK")
+		}
+
 		out[1] = resp.BulkStringArray(user.Flags())
 		out[3] = resp.BulkStringArray(user.Passwords())
 		return resp.StringArray(out)
