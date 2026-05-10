@@ -9,13 +9,13 @@ import (
 )
 
 type Conn struct {
-	queued []parser.Command
-	inTx   bool
-	execTx bool
+	queued        []parser.Command
+	inTx          bool
+	execTx        bool
+	authenticated bool
 	net.Conn
-	user            *users.User
-	isAuthenticated bool
-	password        [32]byte
+	user     *users.User
+	password [32]byte
 }
 
 func New(conn net.Conn, user *users.User) *Conn {
@@ -63,8 +63,27 @@ func (c *Conn) GetUserName() string {
 }
 
 func (c *Conn) CreateUserWithPassword(name, password string) {
-	c.user = users.New(name, password)
-	c.password = users.HashPassword(password)
+	if c.IsAuthenticated() {
+		c.user = users.New(name, password)
+		c.password = users.HashPassword(password)
+		c.authenticated = true
+	}
+}
+
+func (c *Conn) Authenticate(name, password string) bool {
+	u, ok := users.Get(name)
+	if !ok {
+		return false
+	}
+
+	if u.CheckPassword(password) {
+		c.user = u
+		c.password = users.HashPassword(password)
+		c.authenticated = true
+		return true
+	}
+
+	return false
 }
 
 func (c *Conn) IsAuthenticated() bool {
@@ -72,11 +91,15 @@ func (c *Conn) IsAuthenticated() bool {
 		return false
 	}
 
+	if c.authenticated {
+		return true
+	}
+
 	if !c.user.PasswordRequired() {
 		return true
 	}
 
-	return c.user.CheckHashedPassword(c.password)
+	return false
 }
 
 func (c *Conn) AddPassword(password string) {

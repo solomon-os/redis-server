@@ -47,9 +47,6 @@ func Set(u *User) {
 	registry[u.Name()] = u
 }
 
-func GetOrSet(name string) {
-}
-
 func newDefaultUser() *User {
 	u := &User{name: "default"}
 	u.state.Store(&snapshot{flags: []string{"nopass"}})

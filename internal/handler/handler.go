@@ -46,6 +46,9 @@ func (h *Handler) Handle(ctx context.Context, conn *client.Conn, raw string) (st
 }
 
 func (h *Handler) handleCommand(ctx context.Context, conn *client.Conn, cmd parser.Command) string {
+	if cmd.Name != "AUTH" && !conn.IsAuthenticated() {
+		return resp.ErrorSimpleString("NOAUTH Authentication required.")
+	}
 	switch cmd.Name {
 	case "PING":
 		return h.handlePing(ctx, conn, cmd)
@@ -642,12 +645,7 @@ func (h *Handler) handleAuth(_ context.Context, conn *client.Conn, cmd parser.Co
 		return resp.Error(err.Error())
 	}
 
-	user, exist := users.Get(args.Username)
-	if !exist {
-		return resp.Error("user does not exist")
-	}
-
-	if !user.CheckPassword(args.Password) || user.Name() != "default" {
+	if !conn.Authenticate(args.Username, args.Password) {
 		return resp.ErrorSimpleString(
 			"WRONGPASS invalid username-password pair or user is disabled",
 		)
