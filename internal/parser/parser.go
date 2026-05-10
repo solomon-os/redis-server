@@ -83,6 +83,11 @@ type AclArgs struct {
 	AddPassword string
 }
 
+type AuthArgs struct {
+	Username string
+	Password string
+}
+
 func Parse(input string) (Command, error) {
 	if len(input) == 0 {
 		return Command{}, errors.New("empty input")
@@ -367,6 +372,14 @@ func ParseAclArgs(cmd Command) (AclArgs, error) {
 	}
 
 	return arg, nil
+}
+
+func ParseAuthArgs(cmd Command) (AuthArgs, error) {
+	if len(cmd.Args) < 2 {
+		return AuthArgs{}, errors.New("wrong number of arguments for AUTH")
+	}
+
+	return AuthArgs{Username: cmd.Args[0], Password: cmd.Args[1]}, nil
 }
 
 func parseInt(s string) int {

@@ -96,3 +96,7 @@ func Integer(n int) string {
 func Error(msg string) string {
 	return fmt.Sprintf("-ERR %s\r\n", msg)
 }
+
+func ErrorSimpleString(msg string) string {
+	return fmt.Sprintf("-%s\r\n", msg)
+}

@@ -66,7 +66,7 @@ func (s *Server) ListenAndAccept() error {
 			continue
 		}
 
-		user := users.Users["default"] // assign default user
+		user, _ := users.Get("default") // assign default user
 
 		c := client.New(conn, user)
 		s.wg.Go(func() {

@@ -103,6 +103,8 @@ func (h *Handler) handleCommand(ctx context.Context, conn *client.Conn, cmd pars
 
 	case "ACL":
 		return h.handleAcl(ctx, conn, cmd)
+	case "AUTH":
+		return h.handleAuth(ctx, conn, cmd)
 
 	default:
 		return resp.Error("unknown command")
@@ -603,7 +605,7 @@ func (h *Handler) handleAcl(_ context.Context, conn *client.Conn, cmd parser.Com
 		return resp.Error(err.Error())
 	}
 
-	user, userExist := users.Users[arg.Username]
+	user, userExist := users.Get(arg.Username)
 
 	switch strings.ToUpper(arg.Cmd) {
 	case "WHOAMI":
@@ -623,7 +625,7 @@ func (h *Handler) handleAcl(_ context.Context, conn *client.Conn, cmd parser.Com
 
 		if arg.AddPassword != "" {
 			user.AddPassword(arg.AddPassword)
-			users.Users[user.Name()] = user
+			users.Set(user)
 			return resp.SimpleString("OK")
 		}
 
@@ -632,6 +634,26 @@ func (h *Handler) handleAcl(_ context.Context, conn *client.Conn, cmd parser.Com
 		return resp.StringArray(out)
 	}
 	return resp.Error("command not supported")
+}
+
+func (h *Handler) handleAuth(_ context.Context, conn *client.Conn, cmd parser.Command) string {
+	args, err := parser.ParseAuthArgs(cmd)
+	if err != nil {
+		return resp.Error(err.Error())
+	}
+
+	user, exist := users.Get(args.Username)
+	if !exist {
+		return resp.Error("user does not exist")
+	}
+
+	if !user.CheckPassword(args.Password) || user.Name() != "default" {
+		return resp.ErrorSimpleString(
+			"WRONGPASS invalid username-password pair or user is disabled",
+		)
+	}
+
+	return resp.SimpleString("OK")
 }
 
 func (h *Handler) constructXReadReply(
