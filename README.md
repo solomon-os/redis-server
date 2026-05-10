@@ -2,8 +2,9 @@ This is my own implementation of the
 ["Build Your Own Redis" Challenge](https://codecrafters.io/challenges/redis).
 
 A toy Redis clone built in Go, supporting strings, lists, streams, transactions,
-TTL, and blocking commands. Designed to match real Redis semantics where
-possible, with a focus on correct concurrency behavior.
+TTL, blocking commands, ACL users, and password authentication. Designed to
+match real Redis semantics where possible, with a focus on correct concurrency
+behavior.
 
 ## Architecture
 
@@ -12,11 +13,12 @@ app/
   main.go                    - Entry point, starts the server on port 6379
 internal/
   server/server.go           - TCP server, connection lifecycle, graceful shutdown
-  handler/handler.go         - Command dispatch, transaction coordination
+  handler/handler.go         - Command dispatch, transaction coordination, auth gate
   parser/parser.go           - RESP protocol parsing
   resp/resp.go               - RESP protocol response encoding
   store/store.go             - In-memory data store with thread-safe concurrent access
-  client/client.go           - Per-connection state (transactions, queued commands)
+  client/client.go           - Per-connection state (transactions, queued commands, auth)
+  users/users.go             - User registry, password hashing, ACL state
   helper/helper.go           - Generic concurrency helpers (e.g., OrChannel)
 ```
 
@@ -25,7 +27,8 @@ internal/
 - **Server** owns connection lifecycle: accept loop, per-connection goroutines,
   signal-driven shutdown, WaitGroup-based drain.
 - **Handler** dispatches commands to per-feature handlers. Coordinates
-  cross-connection serialization for transactions via `sync.Cond`.
+  cross-connection serialization for transactions via `sync.Cond`. Gates every
+  non-AUTH command behind authentication when the user requires a password.
 - **Parser** decodes raw RESP input into typed `Command` values, with
   bounds-checked argument extraction per command.
 - **Resp** builds RESP wire-format replies (simple strings, bulk strings,
@@ -33,9 +36,12 @@ internal/
 - **Store** owns all data: kv map, list map, stream map. Provides synchronous
   read/write primitives. For blocking semantics it exposes listener channels
   the handler subscribes to.
-- **Client** carries per-connection state: transaction queue, "in transaction"
-  and "executing transaction" flags. Used by the handler when commands need to
-  branch on transaction state.
+- **Client** carries per-connection state: transaction queue, transaction
+  flags, the authenticated user, and the hash of the password the connection
+  authenticated with.
+- **Users** owns the global user registry and the per-user state (flags,
+  password hashes). Reads are wait-free via `atomic.Pointer`; writes use
+  copy-on-write under a per-user mutex.
 
 ## Supported Commands
 
@@ -75,7 +81,8 @@ internal/
 | Command | Usage | Description |
 |---------|-------|-------------|
 | `MULTI` | `MULTI` | Begins a transaction. Subsequent commands return `QUEUED` until `EXEC`. |
-| `EXEC` | `EXEC` | Atomically runs the queued commands. All other connections wait until EXEC completes. |
+| `EXEC` | `EXEC` | Atomically runs the queued commands. Other connections wait until EXEC completes. |
+| `DISCARD` | `DISCARD` | Cancels an in-progress transaction; clears the queue and returns to non-transactional mode. |
 
 Notes:
 - Blocking commands (`BLPOP`, `XREAD BLOCK`) inside a transaction degrade to
@@ -83,6 +90,30 @@ Notes:
 - Argument validation that can be done at queue time (e.g., stream ID format)
   happens before the command is queued, so EXEC failures from malformed input
   surface immediately.
+
+### Authentication & ACL
+
+| Command | Usage | Description |
+|---------|-------|-------------|
+| `AUTH` | `AUTH <username> <password>` | Authenticates the connection. The hash of `<password>` is stored on the connection and re-checked against the user's current passwords on every command. |
+| `ACL WHOAMI` | `ACL WHOAMI` | Returns the username the connection is authenticated as. Returns `NOAUTH` if the connection isn't authenticated. |
+| `ACL GETUSER` | `ACL GETUSER <username>` | Returns the user's flags and password hashes. Returns empty arrays if the user doesn't exist. |
+| `ACL SETUSER` | `ACL SETUSER <username> ><password>` | Creates the user if they don't exist, then appends `<password>` to their password set. The connection switches its effective auth to the new password. |
+
+Auth model:
+- All commands except `AUTH` are gated. If the connection's user requires a
+  password (i.e., does not have the `nopass` flag) and the connection isn't
+  authenticated, the command returns `NOAUTH Authentication required.`
+- The default user (`default`) starts with the `nopass` flag, so connections
+  are authenticated as `default` from the start unless reassigned.
+- Adding a password to a user (via `ACL SETUSER` or first `AUTH`) removes the
+  `nopass` flag from that user.
+- Authentication is *dynamic*: the connection stores the hash of the password
+  it authenticated with, and `IsAuthenticated()` re-checks that hash against
+  the user's *current* passwords. If the password is removed from the user
+  later, the connection loses access on the next command. This differs from
+  real Redis (which freezes auth at AUTH time) and is a deliberate design
+  choice.
 
 ## Concurrency Design
 
@@ -111,6 +142,34 @@ Notes:
   - The executing connection's queued commands are dispatched directly,
     bypassing the entry-point wait.
 
+### Users-level
+
+- **Registry** (`map[string]*User`) is guarded by a `sync.RWMutex`. Reads
+  (`Get`) take `RLock`; writes (`Set`, `New`) take `Lock`. The map and lock
+  are package-private — callers can't reach around the accessors, so the
+  invariant can't be broken from outside.
+- **Per-user state is copy-on-write under `atomic.Pointer`**. Each `User`
+  holds an `atomic.Pointer[snapshot]` where `snapshot` packs both the flags
+  slice and the password hashes slice. Reads (`Flags`, `Passwords`,
+  `CheckPassword`) do a single atomic load of the pointer — wait-free,
+  scales linearly with cores, no RWMutex contention.
+- **Writes** (`AddPassword`) take a per-user `sync.Mutex` (writers only),
+  clone the current snapshot, mutate the copies, and atomically swap the
+  pointer. Once published, a snapshot is never mutated, so readers holding
+  a stale reference are always safe.
+- **Why this pattern here**: passwords are read on essentially every command
+  (auth gate) and written rarely (only on `ACL SETUSER`). That read/write
+  ratio is the textbook case for atomic.Pointer + COW.
+- **Constant-time password comparison**: `CheckHashedPassword` walks all
+  stored hashes accumulating results via bitwise OR rather than short-
+  circuiting on first match. Combined with `crypto/subtle.ConstantTimeCompare`
+  per entry, the function takes the same total time regardless of where (or
+  whether) the match occurs, defeating timing side-channels.
+- **Password storage**: SHA-256 of the plaintext, stored as `[32]byte`.
+  Fixed-size arrays compare faster than hex strings, allocate nothing, and
+  occupy half the bytes. Hex encoding is done lazily on `Passwords()` for
+  display only.
+
 ### Connection-level (server)
 
 - **Graceful shutdown**: `signal.NotifyContext` cancels a parent context on
@@ -120,6 +179,11 @@ Notes:
   all in-flight handlers finish.
 - **Per-connection ctx**: each connection derives its own cancellable context
   from the server's, so client-disconnect propagates without affecting siblings.
+- **Single-goroutine connection state**: `client.Conn`'s per-connection
+  fields (transaction queue, auth state) are touched by exactly one
+  goroutine — the connection's own handler loop. No mutex is needed there
+  by design. The only cross-goroutine touch is the watcher's `c.Close()`,
+  which is documented safe on `net.Conn`.
 
 ### Helpers
 
@@ -143,6 +207,10 @@ Notes:
 - **`slices.Clone` for listener cleanup**: after handing off to the front of a
   listener slice, the discarded prefix is cloned away to release channel
   references for GC.
+- **Auth gate is lazy**: the gate runs at every command entry, re-querying
+  user state. This means ACL changes (password removal) take effect on the
+  next command from any affected connection — no need to reach into other
+  connections to invalidate them.
 
 ## Running
 
@@ -162,6 +230,14 @@ OK
 "1738152000000-0"
 > XREAD BLOCK 5000 STREAMS mystream '$'
 (blocks until a new entry arrives)
+
+# Auth flow
+> ACL SETUSER alice >hunter2
+OK
+> AUTH alice hunter2
+OK
+> ACL WHOAMI
+"alice"
 ```
 
 ## Status
@@ -170,12 +246,12 @@ Implemented:
 - Strings, lists, streams as described above.
 - BLPOP and XREAD BLOCK with correct timeout semantics.
 - Graceful shutdown.
-
-In progress:
-- MULTI / EXEC transactions (basic queueing + atomic execution working;
-  cross-cutting cases being polished).
+- MULTI / EXEC / DISCARD transactions.
+- Password authentication (`AUTH`) with auth-gated commands.
+- ACL user management (`ACL WHOAMI`, `ACL GETUSER`, `ACL SETUSER`).
 
 Not yet:
 - WATCH / optimistic locking.
 - Pub/sub (`SUBSCRIBE` / `PUBLISH`).
 - Replication, persistence, clustering.
+- Per-command ACL permissions (currently auth is all-or-nothing per user).
