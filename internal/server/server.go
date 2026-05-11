@@ -47,10 +47,10 @@ func (s *Server) ListenAndAccept() error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	// go func() {
-	// <-ctx.Done()
-	// l.Close()
-	// }()
+	go func() {
+		<-ctx.Done()
+		l.Close()
+	}()
 
 	for {
 		conn, err := s.l.Accept()
